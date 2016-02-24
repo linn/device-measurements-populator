@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="JavaScriptLibraryMappings">
+    <file url="file://$PROJECT_DIR$" libraries="{device-measurements-populator node_modules}" />
     <file url="PROJECT" libraries="{Node Modules, async-DefinitelyTyped, aws-sdk-DefinitelyTyped, chai-DefinitelyTyped, clone-DefinitelyTyped, express-DefinitelyTyped, mocha-DefinitelyTyped, proxyquire-DefinitelyTyped, sinon-DefinitelyTyped, sinon-chai-DefinitelyTyped}" />
     <includedPredefinedLibrary name="ECMAScript 6" />
   </component>
