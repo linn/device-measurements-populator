@@ -1,0 +1,12 @@
+{
+  "vendor": "linn",
+  "productType": "klimax350",
+  "firstSerialNumber": null,
+  "lastSerialNumber": null,
+  "links": [
+    {
+      "href": "\/product-descriptors\/e8082b8c-f1ee-4a61-8ad7-0e55779ee6be",
+      "rel": "product-descriptor"
+    }
+  ]
+}

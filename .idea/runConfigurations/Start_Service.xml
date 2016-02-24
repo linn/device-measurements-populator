@@ -1,0 +1,15 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Start Service" type="NodeJSConfigurationType" factoryName="Node.js" path-to-node="C:/Program Files/nodejs/node" path-to-js-file="bin/www" working-dir="$PROJECT_DIR$">
+    <envs>
+      <env name="PORT" value="51301" />
+      <env name="AWS_ACCESS_KEY_ID" value="AKIAJQV73YGP6VI43VHQ" />
+      <env name="AWS_SECRET_ACCESS_KEY" value="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" />
+      <env name="NODE_ENV" value="debug" />
+    </envs>
+    <RunnerSettings RunnerId="Basic" />
+    <RunnerSettings RunnerId="debuggableProgram" />
+    <ConfigurationWrapper RunnerId="Basic" />
+    <ConfigurationWrapper RunnerId="debuggableProgram" />
+    <method />
+  </configuration>
+</component>

@@ -1,0 +1,51 @@
+{
+  "vendor": "linn",
+  "id": "e8082b8c-f1ee-4a61-8ad7-0e55779ee6be",
+  "productType": "klimax350",
+  "firstSerialNumber": null,
+  "lastSerialNumber": null,
+  "components": [
+    {
+      "componentName": "UpperBass",
+      "measurements": {
+        "spl": {
+          "file": null,
+          "value": {
+            "measuredOn": "2015-02-23T05:12:17Z",
+            "sourceName": "source",
+            "sourceVersion": "1.0",
+            "value": 1.2,
+            "metadata": {
+
+            }
+          }
+        },
+        "fn": {
+          "file": null,
+          "value": {
+            "measuredOn": "2015-08-23T05:12:17Z",
+            "sourceName": "calculated",
+            "sourceVersion": "2.0",
+            "value": 25.2,
+            "metadata": {
+
+            }
+          }
+        },
+        "impedance": {
+          "file": {
+            "measuredOn": "2015-02-23T05:12:17Z",
+            "sourceName": "source",
+            "sourceVersion": "1.0",
+            "fileType": "tdms",
+            "files": [{
+              "filename": "1336161_UpperBass.tdms",
+              "href": "http://linn.cloud.filedata.debug.s3.amazonaws.com/5b61b280-bb73-11e4-ba72-9dec41bc3eb3"
+            }]
+          },
+          "value": null
+        }
+      }
+    }
+  ]
+}

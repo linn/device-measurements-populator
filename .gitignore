@@ -1,0 +1,8 @@
+## Directory-based project format:
+
+.idea/workspace.xml
+workspace.xml
+test-reports.xml
+*.log
+node_modules
+.env

@@ -1,0 +1,38 @@
+{
+  "productDescriptorId": "25c1cf3c-7e53-490c-9020-62f580613ece",
+  "serialNumber": "12345",
+  "components": [
+    {
+      "componentName": "UpperBass",
+      "measurements": {
+        "spl": {
+          "file": null,
+          "value": {
+            "measuredOn": "2015-02-23T16:11:53.1390000Z",
+            "sourceName": "AcceptanceTest",
+            "sourceVersion": "42",
+            "value": 0,
+            "metadata": {
+              "fStart": "100",
+              "fStop": "12000"
+            }
+          }
+        },
+        "impedance": {
+          "file": {
+            "measuredOn": "2015-02-23T05:12:17Z",
+            "sourceName": "source",
+            "sourceVersion": "1.0",
+            "fileType": "tdms",
+            "files": [{
+              "filename": "1336161_UpperBass.tdms",
+              "href": "http://linn.cloud.filedata.debug.s3.amazonaws.com/6b61b280-bb73-11e4-ba72-9dec41bc3eb3"
+            }]
+          },
+          "value": null
+        }
+      }
+    }
+  ],
+  "lastUpdate": "2015-02-24T16:12:05.0000000"
+}

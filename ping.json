@@ -1,0 +1,7 @@
+{
+    "timeStamp": "${TIMESTAMP}",
+    "config": "${CONFIGURATION}",
+    "branch": "${BRANCH}",
+    "build": "${BUILD_NUMBER}",
+    "commit": "${GIT_COMMIT}"
+}
