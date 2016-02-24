@@ -7,7 +7,7 @@ var uuid = require('node-uuid');
 aws.config.region = config.awsRegion;
 var s3 = new aws.S3();
 
-module.exports.CloudFileRepository = function CloudFileRepository(bucketName) {
+module.exports = function CloudFileRepository(bucketName) {
     function generateUri(key) {
         return 'http://' + bucketName + ".s3.amazonaws.com/" + key;
     }

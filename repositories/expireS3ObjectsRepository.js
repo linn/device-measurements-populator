@@ -3,7 +3,7 @@ var _ = require('underscore');
 
 let config = require('../config');
 let Repository = require('repository-dynamodb');
-var repository = new CloudRepository(config.expireS3ObjectsTableName, "id");
+var repository = new Repository(config.expireS3ObjectsTableName, "id");
 
 repository.scheduleForExpirationById = function scheduleForExpirationByIdFromDynamoDb(id, callback) {
     var expirationDate = new Date();

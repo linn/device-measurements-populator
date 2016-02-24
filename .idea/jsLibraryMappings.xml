@@ -3,6 +3,5 @@
   <component name="JavaScriptLibraryMappings">
     <file url="PROJECT" libraries="{Node Modules, async-DefinitelyTyped, aws-sdk-DefinitelyTyped, chai-DefinitelyTyped, clone-DefinitelyTyped, express-DefinitelyTyped, mocha-DefinitelyTyped, proxyquire-DefinitelyTyped, sinon-DefinitelyTyped, sinon-chai-DefinitelyTyped}" />
     <includedPredefinedLibrary name="ECMAScript 6" />
-    <includedPredefinedLibrary name="Node.js Core" />
   </component>
 </project>
