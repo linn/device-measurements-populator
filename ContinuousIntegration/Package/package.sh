@@ -4,24 +4,16 @@ SYSROOT=deb-src/sysroot
 TARGET_DIR=${SYSROOT}/opt/linn/device-measurements-populator
 DEBIAN=deb-src/DEBIAN
 
-CONFIGURATION=${1}
-BRANCH=${2}
-BUILD_NUMBER=${3}
-PRODUCTION_RELEASE=${4}
+BRANCH=${1}
+BUILD_NUMBER=${2}
 
 GIT_COMMIT=`git show-ref origin/${BRANCH} | grep remotes | cut -d ' ' -f 1`
 TIMESTAMP=`date --utc +%FT%TZ`
-PACKAGE_NAME="device-measurements-populator"
-PACKAGE_VERSION="0.${BUILD_NUMBER}"
-
-if [ ${PRODUCTION_RELEASE} = true ]
-	then
-	PACKAGE_VERSION="1.${BUILD_NUMBER}"
-fi
+PACKAGE_NAME="device-measurements-populator"-${BRANCH}
+PACKAGE_VERSION="${BUILD_NUMBER}"
 
 echo "*************************************"
 echo "*"
-echo "* Configuration : ${CONFIGURATION}"
 echo "* Branch        : ${BRANCH}"
 echo "* Build Number  : ${BUILD_NUMBER}"
 echo "* Git Commit    : ${GIT_COMMIT}"
@@ -47,7 +39,7 @@ cp -Rpu node_modules ${TARGET_DIR}
 
 # Create ping resources
 echo "Creating ping resources"
-echo "{ \"timeStamp\": \"${TIMESTAMP}\", \"config\": \"${CONFIGURATION}\", \"branch\": \"${BRANCH}\", \"build\": \"${BUILD_NUMBER}\", \"commit\": \"${GIT_COMMIT}\" }" > ${TARGET_DIR}/ping.json
+echo "{ \"timeStamp\": \"${TIMESTAMP}\", \"branch\": \"${BRANCH}\", \"build\": \"${BUILD_NUMBER}\", \"commit\": \"${GIT_COMMIT}\" }" > ${TARGET_DIR}/ping.json
 
 echo "Copying Init Script"
 
@@ -90,5 +82,5 @@ fakeroot -- tar czf ../control.tar.gz *
 popd
 
 echo 2.0 > debian-binary
-fakeroot -- ar r ../${PACKAGE_NAME}-${PACKAGE_VERSION}-${CONFIGURATION}.deb debian-binary control.tar.gz data.tar.gz
+fakeroot -- ar r ../device-measurements-populator.deb debian-binary control.tar.gz data.tar.gz
 popd
