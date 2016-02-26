@@ -41,7 +41,7 @@ app.use(function(req, res, next) {
 // error handler
 app.use(function(err, req, res, next) {
     if (!err.status || err.status >= 500) {
-        config.logger.error(err);
+        log.error(err);
     }
     res.status(err.status || 500);
     if (!req.accepts('html')) {
