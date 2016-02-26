@@ -17,6 +17,10 @@
     "expireFileDataTable": {
       "Type": "String",
       "Description" : "DynamoDb table referencing measured device files due for removal"
+    },
+    "productDescriptorsTableIndex": {
+      "Type": "String",
+      "Description" : "DynamoDb index of product descriptors"
     }
   },
   "Resources": {
