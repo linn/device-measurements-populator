@@ -48,11 +48,6 @@ let cfg = config({
         type     : 'string',
         required : true
     },
-    devicesTopologyTableName: {
-        env      : 'DEVICES_TOPOLOGY_TABLE_NAME',
-        type     : 'string',
-        required : true
-    },
     productDescriptorsTableName: {
         env      : 'PRODUCT_DESCRIPTORS_TABLE_NAME',
         type     : 'string',
@@ -64,7 +59,7 @@ let cfg = config({
         required : true
     },
     expireS3ObjectsTableName: {
-        env      : 'EXPIRE_S3_OBJECTS_TABLE_INDEX',
+        env      : 'EXPIRE_S3_OBJECTS_TABLE_NAME',
         type     : 'string',
         required : true
     },

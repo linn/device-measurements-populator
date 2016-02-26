@@ -1,0 +1,69 @@
+{
+  "Description": "Device Measurements Populator Application",
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Parameters" : {
+    "devicesTableName" : {
+      "Type" : "String",
+      "Description" : "DynamoDB Table Name to store devices"
+    },
+    "productDescriptorsTableName" : {
+      "Type" : "String",
+      "Description" : "DynamoDB Table Name to store product descriptors"
+    },
+    "deviceFileDataBucket" : {
+      "Type" : "String",
+      "Description" : "S3 Bucket Name to store measured device files"
+    },
+    "expireFileDataTable": {
+      "Type": "String",
+      "Description" : "DynamoDb table referencing measured device files due for removal"
+    }
+  },
+  "Resources": {
+    "deviceMeasurementsPopulatorUser" : {
+      "Type" : "AWS::IAM::User",
+      "Properties" : {
+        "Path" : "/",
+        "Policies" : [ {
+          "PolicyName" : "deviceMeasurementsPopulatorPolicy",
+          "PolicyDocument" : {
+            "Version": "2012-10-17",
+            "Statement" : [ {
+              "Effect" : "Allow",
+              "Action" : [ "dynamodb:*" ],
+              "Resource"  : { "Fn::Join" :  [ "", [ "arn:aws:dynamodb:", { "Ref" : "AWS::Region" }, ":545349016803:table/", { "Ref" : "expireFileDataTable" } ]]}
+            },{
+              "Effect" : "Allow",
+              "Action" : [ "dynamodb:*" ],
+              "Resource"  : { "Fn::Join" :  [ "", [ "arn:aws:dynamodb:", { "Ref" : "AWS::Region" }, ":545349016803:table/", { "Ref" : "devicesTableName" } ]]}
+            },{
+              "Effect" : "Allow",
+              "Action" : [ "dynamodb:*" ],
+              "Resource"  : { "Fn::Join" :  [ "", [ "arn:aws:dynamodb:", { "Ref" : "AWS::Region" }, ":545349016803:table/", { "Ref" : "productDescriptorsTableName" } ]]}
+            },{
+              "Effect" : "Allow",
+              "Action" : [ "s3:*" ],
+              "Resource": { "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "deviceFileDataBucket" } , "/*" ]]}
+            } ]
+          }
+        } ]
+      }
+    },
+    "deviceMeasurementsPopulatorAccesskey" : {
+      "Type" : "AWS::IAM::AccessKey",
+      "Properties" : {
+        "UserName" : { "Ref" : "deviceMeasurementsPopulatorUser" }
+      }
+    }
+  },
+  "Outputs" : {
+    "AccessKey" : {
+      "Value" : { "Ref" : "deviceMeasurementsPopulatorAccesskey" }
+    },
+    "SecretKey" : {
+      "Value" : {
+        "Fn::GetAtt" : [ "deviceMeasurementsPopulatorAccesskey", "SecretAccessKey" ]
+      }
+    }
+  }
+}
