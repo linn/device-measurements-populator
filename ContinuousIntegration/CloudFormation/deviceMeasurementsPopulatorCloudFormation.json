@@ -30,19 +30,23 @@
             "Version": "2012-10-17",
             "Statement" : [ {
               "Effect" : "Allow",
-              "Action" : [ "dynamodb:*" ],
+              "Action" : [ "dynamodb:Scan", "dynamodb:PutItem", "dynamodb:DeleteItem" ],
               "Resource"  : { "Fn::Join" :  [ "", [ "arn:aws:dynamodb:", { "Ref" : "AWS::Region" }, ":545349016803:table/", { "Ref" : "expireFileDataTable" } ]]}
             },{
               "Effect" : "Allow",
-              "Action" : [ "dynamodb:*" ],
+              "Action" : [ "dynamodb:Query", "dynamodb:GetItem", "dynamodb:DeleteItem" ],
               "Resource"  : { "Fn::Join" :  [ "", [ "arn:aws:dynamodb:", { "Ref" : "AWS::Region" }, ":545349016803:table/", { "Ref" : "devicesTableName" } ]]}
             },{
               "Effect" : "Allow",
-              "Action" : [ "dynamodb:*" ],
+              "Action" : [ "dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:DeleteItem" ],
               "Resource"  : { "Fn::Join" :  [ "", [ "arn:aws:dynamodb:", { "Ref" : "AWS::Region" }, ":545349016803:table/", { "Ref" : "productDescriptorsTableName" } ]]}
             },{
               "Effect" : "Allow",
-              "Action" : [ "s3:*" ],
+              "Action" : [ "dynamodb:Query" ],
+              "Resource"  : { "Fn::Join" :  [ "", [ "arn:aws:dynamodb:", { "Ref" : "AWS::Region" }, ":545349016803:table/", { "Ref" : "productDescriptorsTableName" }, "/index/", { "Ref" : "productDescriptorsTableIndex" } ]]}
+            },{
+              "Effect" : "Allow",
+              "Action" : [ "s3:PutObject", "s3:GetObject", "s3:DeleteObject" ],
               "Resource": { "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "deviceFileDataBucket" } , "/*" ]]}
             } ]
           }

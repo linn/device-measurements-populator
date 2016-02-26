@@ -1,7 +1,6 @@
 "use strict";
 
 var productDescriptorRepository = require('./repositories/cloudProductDescriptorRepository');
-var fileDataRepository = require('./repositories/fileDataRepository');
 var expireS3ObjectsRepository = require('./repositories/expireS3ObjectsRepository');
 
 var cloudComponentProcessor = require('./cloudComponentProcessor');
