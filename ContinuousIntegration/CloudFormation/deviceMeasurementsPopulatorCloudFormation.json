@@ -50,7 +50,7 @@
               "Resource"  : { "Fn::Join" :  [ "", [ "arn:aws:dynamodb:", { "Ref" : "AWS::Region" }, ":545349016803:table/", { "Ref" : "productDescriptorsTableName" }, "/index/", { "Ref" : "productDescriptorsTableIndex" } ]]}
             },{
               "Effect" : "Allow",
-              "Action" : [ "s3:PutObject", "s3:GetObject", "s3:DeleteObject" ],
+              "Action" : [ "s3:ListBucket", "s3:PutObject", "s3:GetObject", "s3:DeleteObject" ],
               "Resource": [ { "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "deviceFileDataBucket" } ]]}, { "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "deviceFileDataBucket" } , "/*" ]]} ]
             } ]
           }
