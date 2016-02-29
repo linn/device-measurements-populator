@@ -47,12 +47,12 @@ app.use(function(err, req, res, next) {
     if (!req.accepts('html')) {
         res.json({
             message: err.message,
-            error: config.showStackTraceOnError ? err : {}
+            error: config.stackTraceOnError ? err : {}
         });
     } else {
         res.render('error', {
             message: err.message,
-            error: config.showStackTraceOnError ? err : {}
+            error: config.stackTraceOnError ? err : {}
         });
     }
 });
