@@ -1,13 +1,11 @@
 "use strict";
 
-var aws = require('aws-sdk');
-var config = require('../../config');
-var uuid = require('node-uuid');
+let aws = require('aws-sdk');
+let uuid = require('node-uuid');
 
-aws.config.region = config.awsRegion;
-var s3 = new aws.S3();
-
-module.exports = function CloudFileRepository(bucketName) {
+module.exports = function S3Repository(awsRegion, bucketName) {
+    aws.config.region = awsRegion;
+    let s3 = new aws.S3();
     function generateUri(key) {
         return 'http://' + bucketName + ".s3.amazonaws.com/" + key;
     }
@@ -46,7 +44,7 @@ module.exports = function CloudFileRepository(bucketName) {
     }
     function loadFileFromS3(id, callback) {
         var params = {
-            Bucket: config.s3.buckets.fileData,
+            Bucket: bucketName,
             Key: id
         };
         s3.getObject(params, function (err, results) {
@@ -62,7 +60,7 @@ module.exports = function CloudFileRepository(bucketName) {
     }
     function removeFileFromS3(id, callback) {
         var params = {
-            Bucket: config.s3.buckets.fileData,
+            Bucket: bucketName,
             Key: id
         };
         s3.deleteObject(params, function (err) {

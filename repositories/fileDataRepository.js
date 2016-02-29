@@ -1,6 +1,6 @@
 "use strict";
 
 var config = require('../config');
-var CloudFileRepository = require('./lib/cloudFileRepository');
+var S3Repository = require('./lib/s3Repository');
 
-module.exports = new CloudFileRepository(config.deviceFileDataBucket);
+module.exports = new S3Repository(config.awsRegion, config.deviceFileDataBucket);
