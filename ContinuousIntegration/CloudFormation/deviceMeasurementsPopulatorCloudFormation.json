@@ -38,7 +38,7 @@
               "Resource"  : { "Fn::Join" :  [ "", [ "arn:aws:dynamodb:", { "Ref" : "AWS::Region" }, ":545349016803:table/", { "Ref" : "expireFileDataTable" } ]]}
             },{
               "Effect" : "Allow",
-              "Action" : [ "dynamodb:Query", "dynamodb:GetItem", "dynamodb:DeleteItem" ],
+              "Action" : [ "dynamodb:Query", "dynamodb:GetItem", "dynamodb:DeleteItem", "dynamodb:PutItem" ],
               "Resource"  : { "Fn::Join" :  [ "", [ "arn:aws:dynamodb:", { "Ref" : "AWS::Region" }, ":545349016803:table/", { "Ref" : "devicesTableName" } ]]}
             },{
               "Effect" : "Allow",
@@ -51,7 +51,7 @@
             },{
               "Effect" : "Allow",
               "Action" : [ "s3:PutObject", "s3:GetObject", "s3:DeleteObject" ],
-              "Resource": { "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "deviceFileDataBucket" } , "/*" ]]}
+              "Resource": [ { "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "deviceFileDataBucket" } ]]}, { "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "deviceFileDataBucket" } , "/*" ]]} ]
             } ]
           }
         } ]
