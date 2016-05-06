@@ -16,13 +16,6 @@ var port = normalizePort(process.env.PORT || '3000');
 app.set('port', port);
 
 /**
- * Get process title from environment and set in Node
- */
-if (process.env.PROCESS_TITLE) {
-  process.title = process.env.PROCESS_TITLE;
-}
-
-/**
  * Create HTTP server.
  */
 

@@ -2,6 +2,14 @@
   "Description": "Device Measurements Populator Application",
   "AWSTemplateFormatVersion": "2010-09-09",
   "Parameters" : {
+    "targetCluster": {
+      "Type": "String",
+      "Description" : "ECS Cluster name within which this application should be run"
+    },
+    "dockerTag": {
+      "Type": "String",
+      "Description" : "Docker tag to deploy"
+    },
     "devicesTableName" : {
       "Type" : "String",
       "Description" : "DynamoDB Table Name to store devices"
@@ -62,15 +70,75 @@
       "Properties" : {
         "UserName" : { "Ref" : "deviceMeasurementsPopulatorUser" }
       }
-    }
-  },
-  "Outputs" : {
-    "AccessKey" : {
-      "Value" : { "Ref" : "deviceMeasurementsPopulatorAccesskey" }
     },
-    "SecretKey" : {
-      "Value" : {
-        "Fn::GetAtt" : [ "deviceMeasurementsPopulatorAccesskey", "SecretAccessKey" ]
+    "taskDefinition": {
+      "Type": "AWS::ECS::TaskDefinition",
+      "Properties": {
+        "ContainerDefinitions": [
+          {
+            "Name": "device-measurements-populator",
+            "Cpu": "1",
+            "Essential": "true",
+            "Image": { "Fn::Join" :  [ "", [ "docker.io/linn/device-measurements-populator:", { "Ref" : "dockerTag" } ]]},
+            "Memory": "100",
+            "PortMappings": [
+              {
+                "HostPort": 60301,
+                "ContainerPort": 3000
+              }
+            ],
+            "Environment": [
+              {
+                "Name": "AWS_REGION",
+                "Value": { "Ref": "AWS::Region" }
+              },
+              {
+                "Name": "AWS_ACCESS_KEY_ID",
+                "Value": { "Ref": "deviceMeasurementsPopulatorAccesskey" }
+              },
+              {
+                "Name": "AWS_SECRET_ACCESS_KEY",
+                "Value": { "Fn::GetAtt": [ "deviceMeasurementsPopulatorAccesskey", "SecretAccessKey" ] }
+              },
+              {
+                "Name": "DEVICES_TABLE_NAME",
+                "Value": { "Ref": "devicesTableName" }
+              },
+              {
+                "Name": "PRODUCT_DESCRIPTORS_TABLE_NAME",
+                "Value": { "Ref": "productDescriptorsTableName" }
+              },
+              {
+                "Name": "PRODUCT_DESCRIPTORS_TABLE_INDEX",
+                "Value": { "Ref": "productDescriptorsTableIndex" }
+              },
+              {
+                "Name": "EXPIRE_S3_OBJECTS_TABLE_NAME",
+                "Value": { "Ref": "expireFileDataTable" }
+              },
+              {
+                "Name": "DEVICE_FILE_DATA_BUCKET",
+                "Value": { "Ref": "deviceFileDataBucket" }
+              },
+              {
+                "Name": "NODE_ENV",
+                "Value": "release"
+              },
+              {
+                "Name": "PORT",
+                "Value": "3000"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "service": {
+      "Type": "AWS::ECS::Service",
+      "Properties" : {
+        "Cluster": { "Ref":"targetCluster" },
+        "DesiredCount": "1",
+        "TaskDefinition" : {"Ref":"taskDefinition"}
       }
     }
   }

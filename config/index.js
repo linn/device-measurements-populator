@@ -18,11 +18,6 @@ let cfg = config({
         default  : ':remote-addr :method :url :status :response-time',
         required : true
     },
-    processTitle: {
-        env      : 'PROCESS_TITLE',
-        type     : 'string',
-        required : true
-    },
     awsRegion : {
         env      : 'AWS_REGION',
         type     : 'string',
@@ -74,8 +69,5 @@ let cfg = config({
         values   : [ 'test', 'debug', 'int', 'release' ]
     }
 });
-
-// restrict this based on NODE_ENV
-cfg.reset = cfg.env !== 'release';
 
 module.exports = cfg;
