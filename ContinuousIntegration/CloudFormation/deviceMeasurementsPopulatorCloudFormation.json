@@ -2,6 +2,14 @@
   "Description": "Device Measurements Populator Application",
   "AWSTemplateFormatVersion": "2010-09-09",
   "Parameters" : {
+    "targetCluster": {
+      "Type": "String",
+      "Description" : "ECS Cluster name within which this application should be run"
+    },
+    "dockerTag": {
+      "Type": "String",
+      "Description" : "Docker tag to deploy"
+    },
     "devicesTableName" : {
       "Type" : "String",
       "Description" : "DynamoDB Table Name to store devices"
