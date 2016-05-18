@@ -1,7 +1,6 @@
 "use strict";
 
 var fileDataRepository = require('./repositories/fileDataRepository');
-var expireS3ObjectsRepository = require('./repositories/expireS3ObjectsRepository');
 
 var _ = require('underscore');
 var async = require('async');
@@ -9,9 +8,6 @@ var clone = require('clone');
 
 function addFileToRepository(file, callback) {
     async.waterfall([
-        function unexpireFile(itercallback){
-            expireS3ObjectsRepository.removeBy(file.id, itercallback);
-        },
         function addFileIfNotPresent(itercallback){
             fileDataRepository.findBy(file.id, function(err) {
                 if (err && err.code === "NoSuchKey") {
