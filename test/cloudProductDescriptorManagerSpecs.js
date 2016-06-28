@@ -9,7 +9,7 @@ var expect = chai.expect;
 chai.use(sinonChai);
 
 describe('Cloud Product Descriptor Manager', function () {
-    var sut, expireS3ObjectsRepositoryStub, loadProductDescriptorCallbackArgs, saveProductDescriptorCallbackArgs, productDescriptorRepositoryStub, cloudFileDataRepositoryStub, saveFileCallbackArgs, loadFileCallbackArgs;
+    var sut, loadProductDescriptorCallbackArgs, saveProductDescriptorCallbackArgs, productDescriptorRepositoryStub, cloudFileDataRepositoryStub, saveFileCallbackArgs, loadFileCallbackArgs;
     beforeEach(function () {
         loadProductDescriptorCallbackArgs = [];
         saveProductDescriptorCallbackArgs = [];
@@ -32,15 +32,9 @@ describe('Cloud Product Descriptor Manager', function () {
             removeBy: sinon.spy(function deleteFileFromStub(id, callback) { callback.apply(); })
         };
 
-        expireS3ObjectsRepositoryStub = {
-            removeBy: sinon.spy(function removeExpirationByIdStub(id, callback) { callback.apply(); }),
-            scheduleForExpirationById: sinon.spy(function scheduleForExpirationByIdStub(id, callback) { callback.apply(); })
-        };
-
         mockery.enable({ useCleanCache: true });
         mockery.registerMock('./repositories/cloudProductDescriptorRepository', productDescriptorRepositoryStub);
         mockery.registerMock('./repositories/fileDataRepository', cloudFileDataRepositoryStub);
-        mockery.registerMock('./repositories/expireS3ObjectsRepository', expireS3ObjectsRepositoryStub);
         mockery.warnOnUnregistered(false);
 
         sut = require('../cloudProductDescriptorManager');
@@ -84,9 +78,6 @@ describe('Cloud Product Descriptor Manager', function () {
         it(' Should add file to S3', function () {
             expect(cloudFileDataRepositoryStub.addOrReplace).to.have.been.calledWith("1c6528c8-819f-4d28-9cea-768b62e7bcdf", "1336161_UpperBass.tdms", new Buffer(data.components[0].measurements.impedance.file.files[0].data));
         });
-        it(' Should remove expiration from s3 expiration repository', function () {
-            expect(expireS3ObjectsRepositoryStub.removeBy).to.have.been.calledWith('1c6528c8-819f-4d28-9cea-768b62e7bcdf');
-        });
         it(' Should not add without id', function () {
             expect(cloudFileDataRepositoryStub.add).not.to.have.been.called;
         });
@@ -115,20 +106,11 @@ describe('Cloud Product Descriptor Manager', function () {
                 done();
             });
         });
-        it(' Should load existing product descriptor id', function () {
-            expect(productDescriptorRepositoryStub.findBy).to.have.been.calledWith(productDescriptorId);
-        });
         it(' Should not delete s3 data', function () {
             expect(cloudFileDataRepositoryStub.removeBy).not.to.have.been.called;
         });
-        it(' Should add s3 data to expired s3 objects repository', function () {
-            expect(expireS3ObjectsRepositoryStub.scheduleForExpirationById).to.have.been.calledWith("5b61b280-bb73-11e4-ba72-9dec41bc3eb4");
-        });
         it(' Should add file to S3', function () {
             expect(cloudFileDataRepositoryStub.addOrReplace).to.have.been.calledWith("1c6528c8-819f-4d28-9cea-768b62e7bcdf", "1336161_UpperBass.tdms", new Buffer(data.components[0].measurements.impedance.file.files[0].data));
-        });
-        it(' Should remove new file id from s3 expiration repository', function () {
-            expect(expireS3ObjectsRepositoryStub.removeBy).to.have.been.calledWith('1c6528c8-819f-4d28-9cea-768b62e7bcdf');
         });
         it(' Should not add without id', function () {
             expect(cloudFileDataRepositoryStub.add).not.to.have.been.called;
@@ -149,12 +131,6 @@ describe('Cloud Product Descriptor Manager', function () {
             loadProductDescriptorCallbackArgs[1] = require('./data/existingCloudProductDescriptorResource.json');
 
             sut.remove(productDescriptorId, done);
-        });
-        it(' Should load existing product descriptor id', function () {
-            expect(productDescriptorRepositoryStub.findBy).to.have.been.calledWith(productDescriptorId);
-        });
-        it(' Should add s3 data to expired s3 objects repository', function () {
-            expect(expireS3ObjectsRepositoryStub.scheduleForExpirationById).to.have.been.calledWith('5b61b280-bb73-11e4-ba72-9dec41bc3eb4');
         });
         it(' Should delete the existing product descriptor', function () {
             expect(productDescriptorRepositoryStub.removeBy).to.have.been.calledWith(productDescriptorId);

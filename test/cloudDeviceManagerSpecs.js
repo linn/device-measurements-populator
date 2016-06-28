@@ -8,7 +8,7 @@ chai.use(sinonChai);
 var mockery = require('mockery');
 
 describe('Cloud Device Manager', function () {
-    var sut, expireS3ObjectsRepositoryStub,loadDeviceCallbackArgs, saveDeviceCallbackArgs, deviceRepositoryStub, cloudFileDataRepositoryStub, saveFileCallbackArgs, loadFileCallbackArgs;
+    var sut, loadDeviceCallbackArgs, saveDeviceCallbackArgs, deviceRepositoryStub, cloudFileDataRepositoryStub, saveFileCallbackArgs, loadFileCallbackArgs;
     beforeEach(function () {
         loadDeviceCallbackArgs = [];
         saveDeviceCallbackArgs = [];
@@ -31,15 +31,9 @@ describe('Cloud Device Manager', function () {
             generateUri: sinon.spy(function generateUriStub(key) { return "http://linn.cloud.filedata.debug.s3.amazonaws.com/" + key; })
         };
 
-        expireS3ObjectsRepositoryStub = {
-            removeBy: sinon.spy(function removeExpirationByIdStub(id, callback) { callback.apply(); }),
-            scheduleForExpirationById: sinon.spy(function scheduleForExpirationByIdStub(id, callback) { callback.apply(); })
-        };
-
         mockery.enable({ useCleanCache: true });
         mockery.registerMock('./repositories/cloudDeviceRepository', deviceRepositoryStub);
         mockery.registerMock('./repositories/fileDataRepository', cloudFileDataRepositoryStub);
-        mockery.registerMock('./repositories/expireS3ObjectsRepository', expireS3ObjectsRepositoryStub);
         mockery.warnOnUnregistered(false);
 
         sut = require('../cloudDeviceManager');
@@ -84,9 +78,6 @@ describe('Cloud Device Manager', function () {
         it(' Should add file to S3', function () {
             expect(cloudFileDataRepositoryStub.addOrReplace).to.have.been.calledWith("cd2b7e35-b5c2-4d23-b362-6a6f6cebc618", "1336161_UpperBass.tdms", new Buffer(data.components[0].measurements.impedance.file.files[0].data));
         });
-        it(' Should remove expiration from s3 expiration repository', function () {
-            expect(expireS3ObjectsRepositoryStub.removeBy).to.have.been.calledWith('cd2b7e35-b5c2-4d23-b362-6a6f6cebc618');
-        });
         it(' Should not add without id', function () {
             expect(cloudFileDataRepositoryStub.add).not.to.have.been.called;
         });
@@ -114,9 +105,6 @@ describe('Cloud Device Manager', function () {
         });
         it(' Should not add file to S3', function () {
             expect(cloudFileDataRepositoryStub.addOrReplace).not.to.have.been.called;
-        });
-        it(' Should remove expiration from s3 expiration repository', function () {
-            expect(expireS3ObjectsRepositoryStub.removeBy).to.have.been.calledWith('cd2b7e35-b5c2-4d23-b362-6a6f6cebc618');
         });
         it(' Should not add without id', function () {
             expect(cloudFileDataRepositoryStub.add).not.to.have.been.called;
@@ -149,14 +137,8 @@ describe('Cloud Device Manager', function () {
         it(' Should not delete s3 data', function () {
             expect(cloudFileDataRepositoryStub.removeBy).not.to.have.been.called;
         });
-        it(' Should add old s3 data to expired s3 objects repository', function () {
-            expect(expireS3ObjectsRepositoryStub.scheduleForExpirationById).to.have.been.calledWith("6b61b280-bb73-11e4-ba72-9dec41bc3eb3");
-        });
         it(' Should remove device from repository', function () {
             expect(deviceRepositoryStub.removeBy).to.have.been.calledWith(productDescriptorId, serialNumber);
-        });
-        it(' Should remove new file id from s3 expiration repository', function () {
-            expect(expireS3ObjectsRepositoryStub.removeBy).to.have.been.calledWith('cd2b7e35-b5c2-4d23-b362-6a6f6cebc618');
         });
         it(' Should add file to S3', function () {
             expect(cloudFileDataRepositoryStub.addOrReplace).to.have.been.calledWith("cd2b7e35-b5c2-4d23-b362-6a6f6cebc618", "1336161_UpperBass.tdms", new Buffer(data.components[0].measurements.impedance.file.files[0].data));
@@ -187,9 +169,6 @@ describe('Cloud Device Manager', function () {
         });
         it(' Should not delete s3 data', function () {
             expect(cloudFileDataRepositoryStub.removeBy).not.to.have.been.called;
-        });
-        it(' Should add s3 data to expired s3 objects repository', function () {
-            expect(expireS3ObjectsRepositoryStub.scheduleForExpirationById).to.have.been.calledWith("cd2b7e35-b5c2-4d23-b362-6a6f6cebc618");
         });
         it(' Should remove device from repository', function () {
             expect(deviceRepositoryStub.removeBy).to.have.been.calledWith(productDescriptorId, serialNumber);

@@ -1,8 +1,6 @@
 "use strict";
 
 var deviceRepository = require('./repositories/cloudDeviceRepository');
-var fileDataRepository = require('./repositories/fileDataRepository');
-var expireS3ObjectsRepository = require('./repositories/expireS3ObjectsRepository');
 
 var cloudComponentProcessor = require('./cloudComponentProcessor');
 var async = require('async');
@@ -52,15 +50,7 @@ function remove(productDescriptorId, serialNumber, callback) {
         } else if (!data) {
             callback();
         } else {
-            async.each(helpers.getS3FileIds(data.components), function deleteMeasurementFile(fileId, iterCallback) {
-                expireS3ObjectsRepository.scheduleForExpirationById(fileId, iterCallback);
-            }, function deleteCloudDevice(err) {
-                if (err) {
-                    callback(err);
-                } else {
-                    deviceRepository.removeBy(productDescriptorId, serialNumber, callback);
-                }
-            });
+            deviceRepository.removeBy(productDescriptorId, serialNumber, callback);
         }
     });
 }

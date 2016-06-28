@@ -9,10 +9,8 @@ var log = require('./logger');
 var config = require('./config');
 var exaktPopulatorApi = require('./routes/exaktPopulatorApi');
 var pingApi = require('./routes/pingApi');
-var removeExpiredProcessor = require('./removeExpiredObjectsProcessor');
-var app = express();
 
-var removeExpiredInterval = setInterval(removeExpiredProcessor.removeExpiredObjects, 86400000);
+var app = express();
 
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'jade');
