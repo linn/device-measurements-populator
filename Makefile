@@ -4,16 +4,31 @@ TIMESTAMP := $(shell date --utc +%FT%TZ)
 PINGJSON := ping.json
 
 define tag_docker
-	@if [ "$(TRAVIS_BRANCH)" != "master" ]; then \
-		docker tag $(1):$(TRAVIS_BUILD_NUMBER) $(1):$(DOCKER_BRANCH_TAG); \
-	fi
-	@if [ "$(TRAVIS_BRANCH)" = "master" -a "$(TRAVIS_PULL_REQUEST)" = "false" ]; then \
-		docker tag $(1):$(TRAVIS_BUILD_NUMBER) $(1):latest; \
-	fi
-	@if [ "$(TRAVIS_PULL_REQUEST)" != "false" ]; then \
-		docker tag $(1):$(TRAVIS_BUILD_NUMBER) $(1):PR_$(TRAVIS_PULL_REQUEST); \
-	fi
+        @if [ "$(TRAVIS_BRANCH)" != "master" ]; then \
+                docker tag $(1):$(TRAVIS_BUILD_NUMBER) $(1):$(DOCKER_BRANCH_TAG); \
+        fi
+        @if [ "$(TRAVIS_BRANCH)" = "master" -a "$(TRAVIS_PULL_REQUEST)" = "false" ]; then \
+                docker tag $(1):$(TRAVIS_BUILD_NUMBER) $(1):latest; \
+                docker tag $(1):$(TRAVIS_BUILD_NUMBER) $(1):K$(TRAVIS_BUILD_NUMBER); \
+        fi
+        @if [ "$(TRAVIS_PULL_REQUEST)" != "false" ]; then \
+                docker tag $(1):$(TRAVIS_BUILD_NUMBER) $(1):PR_$(TRAVIS_PULL_REQUEST); \
+        fi
 endef
+
+define label_dockerfile
+        @echo "LABEL vendor=Linn\ Products\ Ltd. \\" >> $(1)
+        @echo "      uk.co.linn.release-date=$(TIMESTAMP) \\" >> $(1)
+        @echo "      uk.co.linn.build-number=$(TRAVIS_BUILD_NUMBER) \\" >> $(1)
+        @echo "      uk.co.linn.commit=$(TRAVIS_COMMIT) \\" >> $(1)
+        @echo "      uk.co.linn.branch=$(TRAVIS_BRANCH) \\" >> $(1)
+        @if [ "$(TRAVIS_BRANCH)" = "master" -a "$(TRAVIS_PULL_REQUEST)" = "false" ]; then \
+                echo "      uk.co.linn.is-production=true" >> $(1); \
+        else \
+                echo "      uk.co.linn.is-production=false" >> $(1); \
+        fi
+endef
+
 
 build:
 	npm install
@@ -25,6 +40,7 @@ test: build
 	NODE_ENV=test npm test
 
 $(DOCKER): build ping-resource
+        $(call label_dockerfile, Dockerfile)
 	docker build -t $(DOCKER):$(TRAVIS_BUILD_NUMBER) .
 	
 all-the-dockers: $(DOCKER)
