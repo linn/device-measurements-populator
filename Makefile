@@ -40,7 +40,7 @@ test: build
 	NODE_ENV=test npm test
 
 $(DOCKER): build ping-resource
-        $(call label_dockerfile, Dockerfile)
+	$(call label_dockerfile, Dockerfile)
 	docker build -t $(DOCKER):$(TRAVIS_BUILD_NUMBER) .
 	
 all-the-dockers: $(DOCKER)
