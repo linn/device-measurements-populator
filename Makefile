@@ -16,20 +16,6 @@ define tag_docker
 	fi
 endef
 
-define label_dockerfile
-	@echo "LABEL vendor=Linn\ Products\ Ltd. \\" >> $(1)
-	@echo "      uk.co.linn.release-date=$(TIMESTAMP) \\" >> $(1)
-	@echo "      uk.co.linn.build-number=$(TRAVIS_BUILD_NUMBER) \\" >> $(1)
-	@echo "      uk.co.linn.commit=$(TRAVIS_COMMIT) \\" >> $(1)
-	@echo "      uk.co.linn.branch=$(TRAVIS_BRANCH) \\" >> $(1)
-	@if [ "$(TRAVIS_BRANCH)" = "master" -a "$(TRAVIS_PULL_REQUEST)" = "false" ]; then \
-		echo "      uk.co.linn.is-production=true" >> $(1); \
-	else \
-		echo "      uk.co.linn.is-production=false" >> $(1); \
-	fi
-endef
-
-
 build:
 	npm install
 
@@ -38,20 +24,14 @@ ping-resource:
 
 test: build
 	NODE_ENV=test npm test
-
-$(DOCKER): build ping-resource
-	$(call label_dockerfile, Dockerfile)
-	docker build -t $(DOCKER):$(TRAVIS_BUILD_NUMBER) .
 	
-all-the-dockers: $(DOCKER)
-
-docker-tag:
-	$(call tag_docker, $(DOCKER))
+all-the-dockers: build ping-resource
+	docker build -t $(DOCKER):$(TRAVIS_BUILD_NUMBER) \
+	--build-arg VCS_REF=`git rev-parse --short HEAD` \
+	--build-arg VERSION=$(TRAVIS_BUILD_NUMBER) \
+	--build-arg BUILD_DATE=`date -u +"%Y-%m-%dT%H:%M:%SZ"` \
+	.
 
 docker-push:
-	@if [ -n "$(CI)" ]; then \
-		docker push $(DOCKER); \
-	else \
-		echo "Only push to Docker from Travis"; \
-		exit 1; \
-	fi
+	$(call tag_docker, $(DOCKER))
+	docker push $(DOCKER)
