@@ -29,6 +29,10 @@
     "productDescriptorsTableIndex": {
       "Type": "String",
       "Description" : "DynamoDb index of product descriptors"
+    },
+    "albTargetGroupArn": {
+      "Type": "String",
+      "Description": "Target Group ARN for device details api"
     }
   },
   "Resources": {
@@ -83,7 +87,6 @@
             "Memory": "100",
             "PortMappings": [
               {
-                "HostPort": 60301,
                 "ContainerPort": 3000
               }
             ],
@@ -138,7 +141,15 @@
       "Properties" : {
         "Cluster": { "Ref":"targetCluster" },
         "DesiredCount": "1",
-        "TaskDefinition" : {"Ref":"taskDefinition"}
+        "TaskDefinition" : {"Ref":"taskDefinition"},
+        "Role": "ecsServiceRole",
+        "LoadBalancers": [
+          {
+            "ContainerName": "device-measurements-populator",
+            "ContainerPort": 3000,
+            "TargetGroupArn": { "Ref": "albTargetGroupArn" }
+          }
+        ]
       }
     }
   }
