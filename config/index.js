@@ -23,16 +23,6 @@ let cfg = config({
         type     : 'string',
         required : true
     },
-    awsAccessKeyId : {
-        env      : 'AWS_ACCESS_KEY_ID',
-        type     : 'string',
-        required : true
-    },
-    awsSecretAccessKey : {
-        env      : 'AWS_SECRET_ACCESS_KEY',
-        type     : 'string',
-        required : true
-    },
     port : {
         env      : 'PORT',
         type     : 'integer',
