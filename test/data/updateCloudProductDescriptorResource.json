@@ -25,6 +25,7 @@
           "value": {
             "measuredOn": "2015-08-23T05:12:17Z",
             "sourceName": "calculated",
+            "version": 2,
             "sourceVersion": "2.0",
             "value": 25.2,
             "metadata": {
