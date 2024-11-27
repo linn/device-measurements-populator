@@ -11,6 +11,7 @@
             "measuredOn": "2015-02-23T16:11:53.1390000Z",
             "sourceName": "AcceptanceTest",
             "sourceVersion": "42",
+            "version": 44,
             "value": 0,
             "metadata": {
               "fStart": "100",
@@ -24,6 +25,7 @@
             "sourceName": "source",
             "sourceVersion": "1.0",
             "fileType": "tdms",
+            "version": 44,
             "files": [{
               "filename": "1336161_UpperBass.tdms",
               "href": "http://linn.cloud.filedata.debug.s3.amazonaws.com/cd2b7e35-b5c2-4d23-b362-6a6f6cebc618"
