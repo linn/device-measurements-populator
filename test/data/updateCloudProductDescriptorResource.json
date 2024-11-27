@@ -12,6 +12,7 @@
           "value": {
             "measuredOn": "2015-02-23T05:12:17Z",
             "sourceName": "source",
+            "version": 2,
             "sourceVersion": "1.0",
             "value": 1.2,
             "metadata": {
@@ -32,6 +33,7 @@
         },
         "impedance": {
           "file": {
+            "version": 2,
             "measuredOn": "2015-02-23T05:12:17Z",
             "sourceName": "source",
             "sourceVersion": "1.0",
