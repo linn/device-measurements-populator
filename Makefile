@@ -4,6 +4,9 @@ TIMESTAMP := $(shell date --utc +%FT%TZ)
 PINGJSON := ping.json
 
 define tag_docker
+	$(info tb is $(TRAVIS_BRANCH))
+	$(info tbn is $(TRAVIS_BUILD_NUMBER))
+	$(info tpr is $(TRAVIS_PULL_REQUEST))
 	@if [ "$(TRAVIS_BRANCH)" != "master" ]; then \
 		docker tag $(1):$(TRAVIS_BUILD_NUMBER) $(1):$(DOCKER_BRANCH_TAG); \
 	fi
