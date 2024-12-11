@@ -15,8 +15,8 @@
             "sourceName": "source",
             "sourceVersion": "1.0",
             "value": 1.2,
+            "version": 2,
             "metadata": {
-
             }
           }
         },
@@ -26,9 +26,9 @@
             "measuredOn": "2015-08-23T05:12:17Z",
             "sourceName": "calculated",
             "sourceVersion": "2.0",
+            "version": 2,
             "value": 25.2,
             "metadata": {
-
             }
           }
         },
@@ -36,6 +36,7 @@
           "file": {
             "measuredOn": "2015-02-23T05:12:17Z",
             "sourceName": "source",
+            "version": 2,
             "sourceVersion": "1.0",
             "fileType": "tdms",
             "files": [{

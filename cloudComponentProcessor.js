@@ -44,6 +44,7 @@ function processFile(measurement) {
                     callback(null, {
                         measuredOn: measurement.file.measuredOn,
                         sourceName: measurement.file.sourceName,
+                        version: measurement.file.version,
                         sourceVersion: measurement.file.sourceVersion,
                         fileType: measurement.file.fileType,
                         files: data
