@@ -7,19 +7,19 @@ define tag_docker
 	$(info tb is $(TRAVIS_BRANCH))
 	$(info tbn is $(TRAVIS_BUILD_NUMBER))
 	$(info tpr is $(TRAVIS_PULL_REQUEST))
-	@if [ "$(TRAVIS_BRANCH)" != "master" ]; then \
-		$(info branchonly)
+	@if [ "$(TRAVIS_BRANCH)" != "master" -a "$(TRAVIS_PULL_REQUEST)" != "false"  ]; then \
+		$(info branchonly) \
 		docker tag $(1):$(TRAVIS_BUILD_NUMBER) $(1):$(DOCKER_BRANCH_TAG); \
 	fi
 	@if [ "$(TRAVIS_BRANCH)" = "master" -a "$(TRAVIS_PULL_REQUEST)" = "false" ]; then \
-		$(info masterbranch is $(TRAVIS_PULL_REQUEST))
+		$(info masterbranch is $(TRAVIS_PULL_REQUEST)) \
 		docker tag $(1):$(TRAVIS_BUILD_NUMBER) $(1):latest; \
 		docker tag $(1):$(TRAVIS_BUILD_NUMBER) $(1):K$(TRAVIS_BUILD_NUMBER); \
 	fi
 	@if [ "$(TRAVIS_PULL_REQUEST)" != "false" ]; then \
-		$(info pr is $(TRAVIS_PULL_REQUEST))
+		$(info pr is $(TRAVIS_PULL_REQUEST)) \
 		docker tag $(1):$(TRAVIS_BUILD_NUMBER) $(1):PR_$(TRAVIS_PULL_REQUEST); \
-		$(info pr is $(1))
+		$(info pr is $(1)) \
 	fi
 endef
 
@@ -41,4 +41,4 @@ all-the-dockers: build ping-resource
 
 docker-push:
 	$(call tag_docker, $(DOCKER))
-	docker push $(DOCKER):$(TRAVIS_BUILD_NUMBER) \
+	docker push $(DOCKER):$(TRAVIS_BUILD_NUMBER)
