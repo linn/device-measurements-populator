@@ -41,4 +41,4 @@ all-the-dockers: build ping-resource
 
 docker-push:
 	$(call tag_docker, $(DOCKER))
-	docker push $(DOCKER):$(TRAVIS_BUILD_NUMBER)
+	docker push $(DOCKER):$(TRAVIS_BUILD_NUMBER) \
