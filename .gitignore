@@ -7,3 +7,9 @@ test-reports.xml
 .env
 node_modules
 bower_components
+
+# Agent tool scratch — per-user, never committed (linn/linn-api-development#394)
+.serena/
+.chunkhound/
+.chunkhound.json
+.cache/
