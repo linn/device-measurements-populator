@@ -166,6 +166,37 @@ describe("DynamoDB repository (round trip against DynamoDB Local)", function () 
         });
     });
 
+    describe("a result set larger than one DynamoDB page", function () {
+        // DynamoDB caps a Query response at 1MB. A single request therefore returns a PREFIX of the
+        // matches and reports the cut only in LastEvaluatedKey, so a caller that ignores it cannot
+        // tell a complete answer from a truncated one. In the populator this feeds unpublish, which
+        // deletes what it is handed and then removes the parent - stranding whatever was cut.
+        //
+        // Written past the cap deliberately rather than with a Limit: a Limit would exercise the
+        // loop without proving the real 1MB boundary is handled.
+        const BIG = "x".repeat(20000);
+        const COUNT = 80;                     // ~1.6MB, comfortably past one page
+
+        before(async function () {
+            this.timeout(120000);
+            for (let i = 0; i < COUNT; i++) {
+                await promised((cb) => devices.addOrReplace(
+                    { productDescriptorId: "paged", serialNumber: "sn-" + String(i).padStart(4, "0"), blob: BIG }, cb));
+            }
+        });
+
+        it("returns every matching item, not just the first page", async function () {
+            const items = await promised((cb) => devices.queryByEquality({ equals: { productDescriptorId: "paged" } }, cb));
+            expect(items.length).to.equal(COUNT);
+        });
+
+        it("returns them without duplicates", async function () {
+            const items = await promised((cb) => devices.queryByEquality({ equals: { productDescriptorId: "paged" } }, cb));
+            const serials = items.map((i) => i.serialNumber);
+            expect(new Set(serials).size).to.equal(COUNT);
+        });
+    });
+
     describe("a caller contract violation is reported, not thrown", function () {
         // Both of these are programming errors rather than runtime conditions, but each used to fail
         // in a way that loses the caller: Object.keys(undefined) throws SYNCHRONOUSLY, outside the

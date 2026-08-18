@@ -115,19 +115,34 @@ module.exports = function DynamoDbRepository(awsRegion, tableName, hashKey, rang
       return "#a" + index + " = :v" + index;
     });
 
-    adapt(
-      client.send(
-        new QueryCommand({
-          TableName: tableName,
-          IndexName: params.indexName,
-          KeyConditionExpression: conditions.join(" and "),
-          ExpressionAttributeNames: names,
-          ExpressionAttributeValues: values,
-        })
-      ),
-      (result) => result.Items,
-      callback
-    );
+    // Paged to exhaustion, not a single request. DynamoDB caps a Query response at 1MB and reports
+    // the cut with LastEvaluatedKey; a caller that ignores it silently receives a PREFIX of the
+    // matches. That is not hypothetical here - one descriptor group holds 1,571 devices at roughly
+    // 2.1MB, so a single request returns about half of them, and unpublish deletes the devices it
+    // was handed and then removes the parent, stranding the rest with nothing left to enumerate them.
+    const collect = async () => {
+      const items = [];
+      let startKey;
+      do {
+        const page = await client.send(
+          new QueryCommand({
+            TableName: tableName,
+            IndexName: params.indexName,
+            KeyConditionExpression: conditions.join(" and "),
+            ExpressionAttributeNames: names,
+            ExpressionAttributeValues: values,
+            ExclusiveStartKey: startKey,
+          })
+        );
+        if (page.Items) {
+          items.push(...page.Items);
+        }
+        startKey = page.LastEvaluatedKey;
+      } while (startKey);
+      return items;
+    };
+
+    adapt(collect(), (items) => items, callback);
   }
 
   return {
