@@ -166,6 +166,30 @@ describe("DynamoDB repository (round trip against DynamoDB Local)", function () 
         });
     });
 
+    describe("a caller contract violation is reported, not thrown", function () {
+        // Both of these are programming errors rather than runtime conditions, but each used to fail
+        // in a way that loses the caller: Object.keys(undefined) throws SYNCHRONOUSLY, outside the
+        // callback contract, so a waterfall simply stops with no error and no completion.
+        it("reports an absent match set through the callback instead of throwing", async function () {
+            let raised;
+            try {
+                await promised((cb) => descriptors.queryByEquality({}, cb));
+            } catch (err) {
+                raised = err;
+            }
+            expect(raised).to.be.an("error");
+            expect(raised.message).to.contain("at least one attribute");
+        });
+
+        it("refuses a range value on a table that has no range key", function () {
+            // Thrown, not called back: this one is caught at the call site rather than lost, and the
+            // alternative was a literal { undefined: <value> } key and a DynamoDB schema complaint
+            // pointing at the table instead of at the caller.
+            expect(function () { descriptors.findBy("id-1", "unexpected-range", function () {}); })
+                .to.throw(/no range key/);
+        });
+    });
+
     describe("failures reach the caller", function () {
         it("passes a DynamoDB error to the callback rather than throwing", async function () {
             const missing = new Repository(REGION, "table-that-does-not-exist", "id");
