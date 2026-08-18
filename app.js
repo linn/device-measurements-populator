@@ -3,7 +3,6 @@
 var express = require('express');
 var path = require('path');
 var requestLogger = require('morgan');
-var bodyParser = require('body-parser');
 
 var log = require('./logger');
 var config = require('./config');
@@ -13,13 +12,13 @@ var pingApi = require('./routes/pingApi');
 var app = express();
 
 app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'jade');
+app.set('view engine', 'pug');
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(requestLogger(config.requestLoggerFormat, { stream: log.stream }));
 
-app.use(bodyParser.json({ limit: '50mb' }));
-app.use(bodyParser.urlencoded({ extended: false }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: false }));
 
 app.put('/cloud-devices/:productDescriptorId/:serialNumber', exaktPopulatorApi.addDevice);
 app.delete('/cloud-devices/:productDescriptorId/:serialNumber', exaktPopulatorApi.removeDevice);

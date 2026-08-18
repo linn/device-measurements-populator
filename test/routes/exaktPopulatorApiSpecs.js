@@ -2,7 +2,7 @@
 var chai = require("chai");
 var sinon = require('sinon');
 var sinonChai = require('sinon-chai');
-var mockery = require('mockery');
+var proxyquire = require('proxyquire');
 /*jshint -W079 */
 var expect = chai.expect;
 chai.use(sinonChai);
@@ -75,18 +75,20 @@ describe('Exakt Populator Api', function () {
             scheduleForExpirationById: sinon.spy(function scheduleForExpirationByIdStub(id, callback) { callback.apply(); })
         };
 
-        mockery.enable({ useCleanCache: true });
-        mockery.registerMock('./repositories/cloudDeviceRepository', deviceRepositoryStub);
-        mockery.registerMock('./repositories/cloudProductDescriptorRepository', productDescriptorRepositoryStub);
-        mockery.registerMock('./repositories/fileDataRepository', cloudFileDataRepositoryStub);
-        mockery.registerMock('./repositories/expireS3ObjectsRepository', expireS3ObjectsRepositoryStub);
-        mockery.warnOnUnregistered(false);
+        // proxyquire replaces mockery, whose only published versions all carry a critical
+        // prototype-pollution advisory with no fix. noCallThru keeps the previous behaviour -
+        // the stub stands in wholly rather than falling through to the real module - and
+        // '@global' keeps the other half of it: mockery substituted a module everywhere in the
+        // require graph, where proxyquire alone only substitutes the direct require. These
+        // subjects reach their repositories transitively, so without it the real module loads.
+        proxyquire.noCallThru();
 
-        sut = require('../../routes/exaktPopulatorApi');
-    });
-    afterEach(function () {
-        mockery.deregisterAll();
-        mockery.disable();
+        sut = proxyquire('../../routes/exaktPopulatorApi', {
+            './repositories/cloudDeviceRepository': Object.assign(deviceRepositoryStub, { '@global': true }),
+            './repositories/cloudProductDescriptorRepository': Object.assign(productDescriptorRepositoryStub, { '@global': true }),
+            './repositories/fileDataRepository': Object.assign(cloudFileDataRepositoryStub, { '@global': true }),
+            './repositories/expireS3ObjectsRepository': Object.assign(expireS3ObjectsRepositoryStub, { '@global': true })
+        });
     });
     describe('When adding a cloud device and serial number does not match URI', function () {
         var next, res, req;

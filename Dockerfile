@@ -1,4 +1,4 @@
-FROM node:6-slim
+FROM node:24-slim
 
 EXPOSE 3000
 
@@ -18,7 +18,7 @@ LABEL org.label-schema.vendor="Linn Products Ltd." \
       org.label-schema.vcs-type="Git" \
       org.label-schema.vcs-url="https://github.com/linn/device-measurements-populator"
 
-RUN npm install --production --quiet
+RUN npm ci --omit=dev --quiet
 
 ENTRYPOINT [ "npm", "run-script" ]
 

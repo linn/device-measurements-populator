@@ -5,7 +5,7 @@ var sinonChai = require('sinon-chai');
 /*jshint -W079 */
 var expect = chai.expect;
 chai.use(sinonChai);
-var mockery = require('mockery');
+var proxyquire = require('proxyquire');
 
 describe('Cloud Device Manager', function () {
     var sut, loadDeviceCallbackArgs, saveDeviceCallbackArgs, deviceRepositoryStub, cloudFileDataRepositoryStub, saveFileCallbackArgs, loadFileCallbackArgs;
@@ -31,16 +31,18 @@ describe('Cloud Device Manager', function () {
             generateUri: sinon.spy(function generateUriStub(key) { return "http://linn.cloud.filedata.debug.s3.amazonaws.com/" + key; })
         };
 
-        mockery.enable({ useCleanCache: true });
-        mockery.registerMock('./repositories/cloudDeviceRepository', deviceRepositoryStub);
-        mockery.registerMock('./repositories/fileDataRepository', cloudFileDataRepositoryStub);
-        mockery.warnOnUnregistered(false);
+        // proxyquire replaces mockery, whose only published versions all carry a critical
+        // prototype-pollution advisory with no fix. noCallThru keeps the previous behaviour -
+        // the stub stands in wholly rather than falling through to the real module - and
+        // '@global' keeps the other half of it: mockery substituted a module everywhere in the
+        // require graph, where proxyquire alone only substitutes the direct require. These
+        // subjects reach their repositories transitively, so without it the real module loads.
+        proxyquire.noCallThru();
 
-        sut = require('../cloudDeviceManager');
-    });
-    afterEach(function () {
-        mockery.deregisterAll();
-        mockery.disable();
+        sut = proxyquire('../cloudDeviceManager', {
+            './repositories/cloudDeviceRepository': Object.assign(deviceRepositoryStub, { '@global': true }),
+            './repositories/fileDataRepository': Object.assign(cloudFileDataRepositoryStub, { '@global': true })
+        });
     });
     describe('When adding malformed device', function () {
         var productDescriptorId, serialNumber, data, result, resultError;
