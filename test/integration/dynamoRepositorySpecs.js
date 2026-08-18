@@ -1,8 +1,8 @@
 "use strict";
 
 // Round-trip coverage for the data-access layer. It had none: every other spec in this suite
-// replaces the repository modules wholesale with mockery stubs, so the code that actually talks to
-// DynamoDB was never executed by a test. A malformed key condition is accepted by a stub and
+// replaces the repository modules wholesale with proxyquire stubs, so the code that actually talks
+// to DynamoDB was never executed by a test. A malformed key condition is accepted by a stub and
 // rejected by DynamoDB, which is exactly the class of defect a stub cannot see.
 
 const chai = require("chai");
@@ -15,10 +15,11 @@ const REGION = "eu-west-1";
 const DEVICES = "test-devices";
 const DESCRIPTORS = "test-product-descriptors";
 const DESCRIPTORS_INDEX = "vendor-productType-index";
-const TOPOLOGIES = "test-topologies";
+const EXPIRIES = "test-expire-s3-objects";
 
-// Mirrors the deployed schema this service writes to: devices keyed by product descriptor plus
-// serial number, descriptors by id with a vendor/productType index.
+// Mirrors the tables this service actually writes to, named by its own config: devices keyed by
+// product descriptor plus serial number, descriptors by id with a vendor/productType index, and the
+// expiry table it uses to schedule S3 cleanup.
 const TABLES = [
     {
         TableName: DEVICES,
@@ -53,9 +54,9 @@ const TABLES = [
         BillingMode: "PAY_PER_REQUEST",
     },
     {
-        TableName: TOPOLOGIES,
-        AttributeDefinitions: [{ AttributeName: "dsSerialNumber", AttributeType: "S" }],
-        KeySchema: [{ AttributeName: "dsSerialNumber", KeyType: "HASH" }],
+        TableName: EXPIRIES,
+        AttributeDefinitions: [{ AttributeName: "id", AttributeType: "S" }],
+        KeySchema: [{ AttributeName: "id", KeyType: "HASH" }],
         BillingMode: "PAY_PER_REQUEST",
     },
 ];
@@ -74,13 +75,13 @@ describe("DynamoDB repository (round trip against DynamoDB Local)", function () 
     let container;
     let devices;
     let descriptors;
-    let topologies;
+    let expiries;
 
     before(async function () {
         container = await dynamoLocal.start(TABLES);
         devices = new Repository(REGION, DEVICES, "productDescriptorId", "serialNumber");
         descriptors = new Repository(REGION, DESCRIPTORS, "id");
-        topologies = new Repository(REGION, TOPOLOGIES, "dsSerialNumber");
+        expiries = new Repository(REGION, EXPIRIES, "id");
     });
 
     after(function () {
@@ -121,15 +122,15 @@ describe("DynamoDB repository (round trip against DynamoDB Local)", function () 
 
     describe("a table with a hash key only", function () {
         it("round-trips and removes without a range key", async function () {
-            await promised((cb) => topologies.addOrReplace({ dsSerialNumber: "ds-1", components: ["a"] }, cb));
-            expect(await promised((cb) => topologies.findBy("ds-1", cb))).to.deep.equal({ dsSerialNumber: "ds-1", components: ["a"] });
+            await promised((cb) => expiries.addOrReplace({ id: "obj-1", expiresAt: 123 }, cb));
+            expect(await promised((cb) => expiries.findBy("obj-1", cb))).to.deep.equal({ id: "obj-1", expiresAt: 123 });
 
-            await promised((cb) => topologies.removeBy("ds-1", cb));
-            expect(await promised((cb) => topologies.findBy("ds-1", cb))).to.equal(undefined);
+            await promised((cb) => expiries.removeBy("obj-1", cb));
+            expect(await promised((cb) => expiries.findBy("obj-1", cb))).to.equal(undefined);
         });
 
         it("returns undefined for an item that was never written", async function () {
-            expect(await promised((cb) => topologies.findBy("never-written", cb))).to.equal(undefined);
+            expect(await promised((cb) => expiries.findBy("never-written", cb))).to.equal(undefined);
         });
     });
 

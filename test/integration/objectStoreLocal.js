@@ -15,6 +15,7 @@ const net = require("net");
 const { S3Client, CreateBucketCommand, ListBucketsCommand } = require("@aws-sdk/client-s3");
 
 const IMAGE = "minio/minio";
+const ENV_KEYS = ["AWS_ENDPOINT_URL_S3", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"];
 
 function freePort() {
     const server = net.createServer();
@@ -25,7 +26,20 @@ function freePort() {
 }
 
 function docker(args) {
-    return execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    // execFileSync blocks the event loop, so mocha's own timeout cannot fire while it runs.
+    return execFileSync("docker", args, {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 180000,
+        killSignal: "SIGKILL",
+    }).trim();
+}
+
+function restore(saved) {
+    ENV_KEYS.forEach(function (name) {
+        if (saved[name] === undefined) { delete process.env[name]; }
+        else { process.env[name] = saved[name]; }
+    });
 }
 
 async function waitUntilAnswering(client, deadlineMs) {
@@ -46,11 +60,21 @@ async function waitUntilAnswering(client, deadlineMs) {
 module.exports = {
     start: async function startObjectStore(buckets) {
         const port = freePort();
+        // Saved and restored rather than overwritten: a developer or CI agent with real credentials
+        // exported would otherwise run every later spec as localkey/localsecret against real AWS.
+        const saved = {};
+        ENV_KEYS.forEach(function (name) { saved[name] = process.env[name]; });
+
         const containerId = docker([
             "run", "-d", "--rm", "-p", port + ":9000",
             "-e", "MINIO_ROOT_USER=localkey", "-e", "MINIO_ROOT_PASSWORD=localsecret",
             IMAGE, "server", "/data",
         ]);
+
+        const reap = function () {
+            try { docker(["rm", "-f", containerId]); } catch (ignored) { /* already gone */ }
+        };
+        process.once("exit", reap);
 
         process.env.AWS_ENDPOINT_URL_S3 = "http://127.0.0.1:" + port;
         process.env.AWS_ACCESS_KEY_ID = "localkey";
@@ -64,15 +88,17 @@ module.exports = {
                 await admin.send(new CreateBucketCommand({ Bucket: bucket }));
             }
         } catch (err) {
-            docker(["rm", "-f", containerId]);
+            process.removeListener("exit", reap);
+            reap();
+            restore(saved);
             throw err;
         }
 
         return {
             port: port,
             stop: function stopObjectStore() {
-                docker(["rm", "-f", containerId]);
-                delete process.env.AWS_ENDPOINT_URL_S3;
+                process.removeListener("exit", reap);
+                try { reap(); } finally { restore(saved); }
             },
         };
     },

@@ -11,6 +11,7 @@ const net = require("net");
 const { DynamoDBClient, CreateTableCommand, ListTablesCommand } = require("@aws-sdk/client-dynamodb");
 
 const IMAGE = "amazon/dynamodb-local";
+const ENV_KEYS = ["AWS_ENDPOINT_URL_DYNAMODB", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"];
 
 function freePort() {
     const server = net.createServer();
@@ -21,7 +22,21 @@ function freePort() {
 }
 
 function docker(args) {
-    return execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    // execFileSync blocks the event loop, so mocha's own timeout cannot fire while it runs. Without
+    // a bound here a slow or unreachable registry hangs the suite rather than failing it.
+    return execFileSync("docker", args, {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 180000,
+        killSignal: "SIGKILL",
+    }).trim();
+}
+
+function restore(saved) {
+    ENV_KEYS.forEach(function (name) {
+        if (saved[name] === undefined) { delete process.env[name]; }
+        else { process.env[name] = saved[name]; }
+    });
 }
 
 async function waitUntilAnswering(client, deadlineMs) {
@@ -40,14 +55,25 @@ async function waitUntilAnswering(client, deadlineMs) {
 }
 
 module.exports = {
-    // Returns a handle whose `stop()` removes the container. The endpoint is published through
-    // AWS_ENDPOINT_URL_DYNAMODB, which the SDK reads by itself - production code has no test seam.
+    // Returns a handle whose `stop()` removes the container and puts the environment back as it was.
+    // The endpoint is published through AWS_ENDPOINT_URL_DYNAMODB, which the SDK reads by itself, so
+    // production code carries no test seam; a bare IP makes it address path-style.
     start: async function startDynamoDbLocal(tables) {
         const port = freePort();
+        const saved = {};
+        ENV_KEYS.forEach(function (name) { saved[name] = process.env[name]; });
+
         const containerId = docker(["run", "-d", "--rm", "-p", port + ":8000", IMAGE]);
 
-        process.env.AWS_ENDPOINT_URL_DYNAMODB = "http://localhost:" + port;
-        // DynamoDB Local rejects a request with no credentials at all; it never validates them.
+        // --rm reaps the container when the CONTAINER exits, not when this process does. Without
+        // this an uncaught exception or a CI kill leaves it running and holding its port.
+        const reap = function () {
+            try { docker(["rm", "-f", containerId]); } catch (ignored) { /* already gone */ }
+        };
+        process.once("exit", reap);
+
+        process.env.AWS_ENDPOINT_URL_DYNAMODB = "http://127.0.0.1:" + port;
+        // DynamoDB Local rejects a request carrying no credentials at all; it never validates them.
         process.env.AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID || "local";
         process.env.AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY || "local";
 
@@ -59,15 +85,17 @@ module.exports = {
                 await admin.send(new CreateTableCommand(table));
             }
         } catch (err) {
-            docker(["rm", "-f", containerId]);
+            process.removeListener("exit", reap);
+            reap();
+            restore(saved);
             throw err;
         }
 
         return {
             port: port,
             stop: function stopDynamoDbLocal() {
-                docker(["rm", "-f", containerId]);
-                delete process.env.AWS_ENDPOINT_URL_DYNAMODB;
+                process.removeListener("exit", reap);
+                try { reap(); } finally { restore(saved); }
             },
         };
     },

@@ -71,7 +71,7 @@ describe('Cloud Device Manager', function () {
             expectedData = require('./data/cloudDeviceResource.json');
 
             saveFileCallbackArgs[1] = {key: 'cd2b7e35-b5c2-4d23-b362-6a6f6cebc618', href:"http://linn.cloud.filedata.debug.s3.amazonaws.com/cd2b7e35-b5c2-4d23-b362-6a6f6cebc618"};
-            loadFileCallbackArgs[0] = {code : "NoSuchKey"};
+            loadFileCallbackArgs[0] = Object.assign(new Error("NoSuchKey"), { name: "NoSuchKey" });
             sut.add(productDescriptorId, serialNumber, data, function (err, data) {
                 result = data;
                 done();
@@ -128,7 +128,7 @@ describe('Cloud Device Manager', function () {
             expectedData = require('./data/cloudDeviceResource.json');
 
             loadDeviceCallbackArgs[1] = existingData;
-            loadFileCallbackArgs[0] = {code : "NoSuchKey"};
+            loadFileCallbackArgs[0] = Object.assign(new Error("NoSuchKey"), { name: "NoSuchKey" });
             saveFileCallbackArgs[1] = {key: 'cd2b7e35-b5c2-4d23-b362-6a6f6cebc618', href:"http://linn.cloud.filedata.debug.s3.amazonaws.com/cd2b7e35-b5c2-4d23-b362-6a6f6cebc618"};
 
             sut.add(productDescriptorId, serialNumber, data, function (err, data) {

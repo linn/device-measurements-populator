@@ -3,6 +3,21 @@ var chai = require("chai");
 var sinon = require('sinon');
 var sinonChai = require('sinon-chai');
 var proxyquire = require('proxyquire');
+
+// This spec is self-sufficient: 12factor-config reads these at require time and exits if one is
+// missing. They used to arrive as a side effect of whichever spec file mocha loaded first, so the
+// file passed in a full run and failed on its own.
+Object.assign(process.env, {
+    REQUEST_LOGGER_FORMAT: ':method :url',
+    AWS_REGION: 'eu-west-1',
+    PORT: '0',
+    DEVICES_TABLE_NAME: 'devices',
+    PRODUCT_DESCRIPTORS_TABLE_NAME: 'descriptors',
+    PRODUCT_DESCRIPTORS_TABLE_INDEX: 'descriptors-index',
+    EXPIRE_S3_OBJECTS_TABLE_NAME: 'expiries',
+    DEVICE_FILE_DATA_BUCKET: 'file-data',
+    NODE_ENV: 'test'
+});
 /*jshint -W079 */
 var expect = chai.expect;
 chai.use(sinonChai);

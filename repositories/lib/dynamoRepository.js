@@ -17,13 +17,15 @@ const {
   QueryCommand,
 } = require("@aws-sdk/lib-dynamodb");
 
-let sharedClient;
+// Keyed by region rather than a single shared client: a lone client would silently serve a
+// repository constructed for a different region than the one it asked for.
+const clientsByRegion = new Map();
 
 function documentClient(awsRegion) {
-  if (!sharedClient) {
-    sharedClient = DynamoDBDocumentClient.from(new DynamoDBClient({ region: awsRegion }));
+  if (!clientsByRegion.has(awsRegion)) {
+    clientsByRegion.set(awsRegion, DynamoDBDocumentClient.from(new DynamoDBClient({ region: awsRegion })));
   }
-  return sharedClient;
+  return clientsByRegion.get(awsRegion);
 }
 
 // The callers are callback-style throughout. Rather than convert them, each command is adapted
@@ -50,6 +52,11 @@ module.exports = function DynamoDbRepository(awsRegion, tableName, hashKey, rang
   function keyFor(id, range) {
     const key = { [hashKey]: id };
     if (range !== undefined) {
+      // Without this the key becomes a literal { undefined: <value> } and DynamoDB reports a
+      // validation error about the schema rather than about the caller, which is where the bug is.
+      if (!rangeKey) {
+        throw new Error("a range key was supplied for " + tableName + ", which has no range key");
+      }
       key[rangeKey] = range;
     }
     return key;
@@ -91,11 +98,20 @@ module.exports = function DynamoDbRepository(awsRegion, tableName, hashKey, rang
   // because DynamoDB reserves several hundred words and a collision fails only at runtime, on the
   // one attribute nobody thought to check.
   function queryByEquality(params, callback) {
+    // Validated before the map: Object.keys(undefined) throws SYNCHRONOUSLY, which escapes the
+    // callback contract entirely - the caller's callback never fires and a waterfall simply stops.
+    const equals = (params && params.equals) || {};
+    if (Object.keys(equals).length === 0) {
+      return process.nextTick(function () {
+        callback(new Error("queryByEquality on " + tableName + " needs at least one attribute to match"));
+      });
+    }
+
     const names = {};
     const values = {};
-    const conditions = Object.keys(params.equals).map((attribute, index) => {
+    const conditions = Object.keys(equals).map((attribute, index) => {
       names["#a" + index] = attribute;
-      values[":v" + index] = params.equals[attribute];
+      values[":v" + index] = equals[attribute];
       return "#a" + index + " = :v" + index;
     });
 

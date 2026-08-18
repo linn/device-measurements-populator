@@ -67,7 +67,23 @@ describe("the assembled application", function () {
             headers: { "Content-Type": "application/json", Accept: "application/json" },
             body: "{not json",
         });
+        expect(response.status).to.equal(400);
         const body = await response.json();
         expect(body.message).to.contain("JSON");
+        expect(body.message).to.not.equal("Not a valid request");
     });
+
+    it("rejects an unparsed body as a bad request rather than a server error", async function () {
+        // express 4 handed an unparsed body through as {}; express 5 leaves it undefined. Without a
+        // guard the first property read throws and the contract's 400 becomes a 500, so the status
+        // is what discriminates here - the message alone is the same shape either way.
+        const response = await fetch(origin + "/cloud-product-descriptors/abc", {
+            method: "PUT",
+            headers: { "Content-Type": "text/plain", Accept: "application/json" },
+            body: "not json at all",
+        });
+        expect(response.status).to.be.below(500);
+        expect(response.status).to.equal(400);
+    });
+
 });

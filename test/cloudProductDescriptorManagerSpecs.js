@@ -70,7 +70,7 @@ describe('Cloud Product Descriptor Manager', function () {
             expectedData = require('./data/cloudProductDescriptorResource.json');
 
             saveFileCallbackArgs[1] = {key: '5b61b280-bb73-11e4-ba72-9dec41bc3eb3', href:"http://linn.cloud.filedata.debug.s3.amazonaws.com/5b61b280-bb73-11e4-ba72-9dec41bc3eb3"};
-            loadFileCallbackArgs[0] = {code : "NoSuchKey"};
+            loadFileCallbackArgs[0] = Object.assign(new Error("NoSuchKey"), { name: "NoSuchKey" });
 
             sut.add(productDescriptorId, data, function (err, data) {
                 result = data;
@@ -100,7 +100,7 @@ describe('Cloud Product Descriptor Manager', function () {
             expectedData = require('./data/cloudProductDescriptorResource.json');
 
             saveFileCallbackArgs[1] = {key: '5b61b280-bb73-11e4-ba72-9dec41bc3eb3', href:"http://linn.cloud.filedata.debug.s3.amazonaws.com/5b61b280-bb73-11e4-ba72-9dec41bc3eb3"};
-            loadFileCallbackArgs[0] = {code : "NoSuchKey"};
+            loadFileCallbackArgs[0] = Object.assign(new Error("NoSuchKey"), { name: "NoSuchKey" });
             loadProductDescriptorCallbackArgs[1] = existingData;
 
             sut.add(productDescriptorId, data, function (err, data) {
