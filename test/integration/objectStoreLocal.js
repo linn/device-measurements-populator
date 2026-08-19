@@ -14,7 +14,10 @@ const { execFileSync } = require("child_process");
 const net = require("net");
 const { S3Client, CreateBucketCommand, ListBucketsCommand } = require("@aws-sdk/client-s3");
 
-const IMAGE = "minio/minio";
+// Pinned by digest, not by tag. An untagged image is :latest, so the round trips these
+// specs make would be validating against whatever the registry served that day - and the
+// whole point of them is to be the fixed reference the production code is compared to.
+const IMAGE = "minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e";
 const ENV_KEYS = ["AWS_ENDPOINT_URL_S3", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"];
 
 function freePort() {
@@ -66,7 +69,7 @@ module.exports = {
         ENV_KEYS.forEach(function (name) { saved[name] = process.env[name]; });
 
         const containerId = docker([
-            "run", "-d", "--rm", "-p", port + ":9000",
+            "run", "-d", "--rm", "-p", "127.0.0.1:" + port + ":9000",
             "-e", "MINIO_ROOT_USER=localkey", "-e", "MINIO_ROOT_PASSWORD=localsecret",
             IMAGE, "server", "/data",
         ]);

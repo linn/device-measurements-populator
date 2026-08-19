@@ -10,7 +10,10 @@ const { execFileSync } = require("child_process");
 const net = require("net");
 const { DynamoDBClient, CreateTableCommand, ListTablesCommand } = require("@aws-sdk/client-dynamodb");
 
-const IMAGE = "amazon/dynamodb-local";
+// Pinned by digest, not by tag. An untagged image is :latest, so the round trips these
+// specs make would be validating against whatever the registry served that day - and the
+// whole point of them is to be the fixed reference the production code is compared to.
+const IMAGE = "amazon/dynamodb-local@sha256:ff89bd48ff32cd8d9be5fee8873b65b8854dc408f1afe881be6eb00247bc0dab";
 const ENV_KEYS = ["AWS_ENDPOINT_URL_DYNAMODB", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"];
 
 function freePort() {
@@ -63,7 +66,7 @@ module.exports = {
         const saved = {};
         ENV_KEYS.forEach(function (name) { saved[name] = process.env[name]; });
 
-        const containerId = docker(["run", "-d", "--rm", "-p", port + ":8000", IMAGE]);
+        const containerId = docker(["run", "-d", "--rm", "-p", "127.0.0.1:" + port + ":8000", IMAGE]);
 
         // --rm reaps the container when the CONTAINER exits, not when this process does. Without
         // this an uncaught exception or a CI kill leaves it running and holding its port.
