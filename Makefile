@@ -23,7 +23,7 @@ define tag_docker
 endef
 
 build:
-	npm install
+	npm ci
 
 ping-resource:
 	@echo "{ \"timeStamp\": \"$(TIMESTAMP)\", \"branch\": \"$(TRAVIS_BRANCH)\", \"build\": \"$(TRAVIS_BUILD_NUMBER)\", \"commit\": \"$(TRAVIS_COMMIT)\" }" > $(PINGJSON)

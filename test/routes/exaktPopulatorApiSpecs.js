@@ -91,11 +91,16 @@ describe('Exakt Populator Api', function () {
         };
 
         // proxyquire replaces mockery, whose only published versions all carry a critical
-        // prototype-pollution advisory with no fix. noCallThru keeps the previous behaviour -
-        // the stub stands in wholly rather than falling through to the real module - and
-        // '@global' keeps the other half of it: mockery substituted a module everywhere in the
-        // require graph, where proxyquire alone only substitutes the direct require. These
-        // subjects reach their repositories transitively, so without it the real module loads.
+        // prototype-pollution advisory with no fix. noCallThru keeps one half of the old behaviour
+        // - the stub stands in wholly rather than falling through to the real module - and
+        // '@global' keeps the other: mockery substituted a module everywhere in the require graph,
+        // where proxyquire alone substitutes only the direct require, and these subjects reach
+        // their repositories transitively.
+        //
+        // NOT equivalent in one respect: mockery ran with useCleanCache, so each spec got a fresh
+        // module graph. proxyquire preserves the require cache, so anything not stubbed here stays
+        // loaded from whichever spec file required it first - which is why specs that depend on
+        // config must read their values back from config rather than assume their own env won.
         proxyquire.noCallThru();
 
         sut = proxyquire('../../routes/exaktPopulatorApi', {

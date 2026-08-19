@@ -197,6 +197,22 @@ describe("DynamoDB repository (round trip against DynamoDB Local)", function () 
         });
     });
 
+    describe("callback arity, which async.waterfall depends on", function () {
+        // The package this replaced called back from a delete with NO value. async.waterfall
+        // forwards every argument after `err` to the next task, so passing one shifts that task's
+        // arguments and binds its continuation to undefined - surfacing as an uncaught
+        // "callback is not a function" on the SECOND write of a device, with the request never
+        // answered. No stub can catch it: the stubs encode the contract rather than test it.
+        it("calls back from a delete with an error slot and nothing else", function (done) {
+            devices.addOrReplace({ productDescriptorId: "arity", serialNumber: "sn" }, function () {
+                devices.removeBy("arity", "sn", function () {
+                    expect(arguments.length).to.be.at.most(1);
+                    done();
+                });
+            });
+        });
+    });
+
     describe("a caller contract violation is reported, not thrown", function () {
         // Both of these are programming errors rather than runtime conditions, but each used to fail
         // in a way that loses the caller: Object.keys(undefined) throws SYNCHRONOUSLY, outside the
