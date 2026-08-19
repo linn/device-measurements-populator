@@ -64,11 +64,11 @@ function adapt(promise, onResolved, callback) {
 // task's arguments and binds its continuation to undefined, and the symptom is an uncaught
 // "callback is not a function" - the request never answers and the process dies.
 //
-// It was device-measurements-populator that this crashed, on the second write of any device, since
-// only that service deletes inside a waterfall. This copy has no caller of removeBy at all; the
-// arity is kept identical because the two copies of this module are held byte-identical on purpose,
-// and a divergence introduced "because nothing here calls it" is how the next caller inherits the
-// bug.
+// It was device-measurements-populator that this crashed, on the second write of any device: its
+// cloudDeviceManager deletes inside a waterfall, so the extra argument landed where it did damage.
+// This file is held byte-identical across both services, so the arity is fixed in both regardless
+// of which one currently has such a caller - a divergence introduced "because nothing here calls
+// it that way" is how the next caller inherits the bug.
 function adaptVoid(promise, callback) {
   promise.then(
     () => process.nextTick(() => callback(null)),

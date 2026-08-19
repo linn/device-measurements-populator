@@ -97,17 +97,18 @@ describe('Exakt Populator Api', function () {
         // where proxyquire alone substitutes only the direct require, and these subjects reach
         // their repositories transitively.
         //
-        // NOT equivalent in one respect: mockery ran with useCleanCache, so each spec got a fresh
-        // module graph. proxyquire preserves the require cache, so anything not stubbed here stays
-        // loaded from whichever spec file required it first - which is why specs that depend on
-        // config must read their values back from config rather than assume their own env won.
+        // The keys are relative to THE MODULE BEING PROXYQUIRED, not to the module that requires
+        // the dependency. This subject lives in routes/, so './repositories/x' would resolve to
+        // routes/repositories/x - a path nothing requires - and the real repository would load
+        // instead, silently, with noCallThru hiding the bad resolve. Verified by driving the route:
+        // with './' the stub is never called and execution reaches a live DynamoDB client.
         proxyquire.noCallThru();
 
         sut = proxyquire('../../routes/exaktPopulatorApi', {
-            './repositories/cloudDeviceRepository': Object.assign(deviceRepositoryStub, { '@global': true }),
-            './repositories/cloudProductDescriptorRepository': Object.assign(productDescriptorRepositoryStub, { '@global': true }),
-            './repositories/fileDataRepository': Object.assign(cloudFileDataRepositoryStub, { '@global': true }),
-            './repositories/expireS3ObjectsRepository': Object.assign(expireS3ObjectsRepositoryStub, { '@global': true })
+            '../repositories/cloudDeviceRepository': Object.assign(deviceRepositoryStub, { '@global': true }),
+            '../repositories/cloudProductDescriptorRepository': Object.assign(productDescriptorRepositoryStub, { '@global': true }),
+            '../repositories/fileDataRepository': Object.assign(cloudFileDataRepositoryStub, { '@global': true }),
+            '../repositories/expireS3ObjectsRepository': Object.assign(expireS3ObjectsRepositoryStub, { '@global': true })
         });
     });
     describe('When adding a cloud device and serial number does not match URI', function () {

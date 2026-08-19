@@ -16,11 +16,13 @@ const proxyquire = require("proxyquire");
 
 const dynamoLocal = require("./dynamoLocal");
 
+const DEVICES = "devices";
+
 Object.assign(process.env, {
     REQUEST_LOGGER_FORMAT: ":method :url",
     AWS_REGION: "eu-west-1",
     PORT: "0",
-    DEVICES_TABLE_NAME: "devices",
+    DEVICES_TABLE_NAME: DEVICES,
     PRODUCT_DESCRIPTORS_TABLE_NAME: "descriptors",
     PRODUCT_DESCRIPTORS_TABLE_INDEX: "descriptors-index",
     EXPIRE_S3_OBJECTS_TABLE_NAME: "expiries",
@@ -33,16 +35,17 @@ describe("uploading the same device twice", function () {
 
     let container;
     let manager;
-    let uncaught;
 
     before(async function () {
-        // The table is named from config rather than from a constant. config is evaluated on its
-        // first require anywhere in the run, which may be another spec file - proxyquire preserves
-        // the module cache, so the repository this spec exercises is already bound to whatever
-        // table name won that race. Reading it back removes the ordering coupling entirely.
-        const config = require("../../config");
+        // Named from this file's own env, NOT read back from a required config. proxyquire's
+        // '@global' disables the module cache for the whole graph, so config is re-evaluated from
+        // live process.env when the subject is loaded below - i.e. from the values this file sets.
+        // A `require("../../config")` here would instead return the CACHED config, belonging to
+        // whichever spec file loaded it first, and the two disagree the moment any spec sets a
+        // different table name. Verified: changing appSpecs' DEVICES_TABLE_NAME breaks this spec
+        // when it reads config back, and does not when it uses its own constant.
         container = await dynamoLocal.start([{
-            TableName: config.devicesTableName,
+            TableName: DEVICES,
             AttributeDefinitions: [
                 { AttributeName: "productDescriptorId", AttributeType: "S" },
                 { AttributeName: "serialNumber", AttributeType: "S" }
@@ -72,19 +75,16 @@ describe("uploading the same device twice", function () {
         if (container) { container.stop(); }
     });
 
-    beforeEach(function () {
-        uncaught = null;
-        process.once("uncaughtException", function (err) { uncaught = err; });
-    });
-
     const upload = function () {
         return new Promise(function (resolve) {
-            let fired = false;
-            manager.add("pd-1", "sn-1", { lastUpdate: "L", components: [{ componentName: "t", measurements: {} }] },
-                function (err) { fired = true; resolve({ fired: true, err: err }); });
             // The failure mode is a callback that never fires, so a timeout is the observable -
-            // asserting only on the error would hang the suite instead of failing it.
-            setTimeout(function () { if (!fired) { resolve({ fired: false }); } }, 8000);
+            // asserting only on the error would hang the suite instead of failing it. The timer is
+            // cleared on success: an uncleared one holds the event loop open for its full duration
+            // and, under a regression, lets the async body resume after `after()` has torn the
+            // container down, which reports as ECONNREFUSED rather than as the bug.
+            const timer = setTimeout(function () { resolve({ fired: false }); }, 8000);
+            manager.add("pd-1", "sn-1", { lastUpdate: "L", components: [{ componentName: "t", measurements: {} }] },
+                function (err) { clearTimeout(timer); resolve({ fired: true, err: err }); });
         });
     };
 
@@ -98,7 +98,8 @@ describe("uploading the same device twice", function () {
         await upload();
         const result = await upload();
         expect(result.fired, "the callback never fired - the request would hang").to.equal(true);
+        // No assertion on an uncaught exception: mocha installs its own handler and attributes the
+        // throw to the running test, so a regression fails here before any such check is reached.
         expect(result.err || null).to.equal(null);
-        expect(uncaught, "an uncaught exception escaped").to.equal(null);
     });
 });
