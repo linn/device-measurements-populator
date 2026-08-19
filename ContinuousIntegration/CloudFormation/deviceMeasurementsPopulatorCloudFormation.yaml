@@ -22,9 +22,9 @@ Parameters:
   productDescriptorsTableIndex:
     Type: String
     Description: DynamoDb index of product descriptors
-  albTargetGroupArn:
+  albTargetGroupArnExport:
     Type: String
-    Description: Target Group ARN for device details api
+    Description: Name of the CloudFormation export holding this service's ALB target group ARN
 Resources:
   taskDefinitionRole:
     Type: AWS::IAM::Role
@@ -147,4 +147,5 @@ Resources:
       LoadBalancers:
         - ContainerName: device-measurements-populator
           ContainerPort: 3000
-          TargetGroupArn: !Ref 'albTargetGroupArn'
+          TargetGroupArn:
+            Fn::ImportValue: !Ref albTargetGroupArnExport
