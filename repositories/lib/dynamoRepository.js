@@ -22,11 +22,15 @@ const {
 
 // Keyed by region rather than a single shared client: a lone client would silently serve a
 // repository constructed for a different region than the one it asked for.
-// Keyed by endpoint as well as region. The SDK resolves AWS_ENDPOINT_URL_DYNAMODB once, on a
-// client's FIRST send, and memoises it for that client's lifetime - so a client cached across a
-// change of that variable keeps addressing the old endpoint. In a test run that means a suite
-// silently talking to real AWS instead of the local container, which passes locally and does
-// damage in CI, where credentials exist.
+// Keyed by endpoint as well as region, so a client built before AWS_ENDPOINT_URL_DYNAMODB changed
+// is not handed to a caller that expects the new one.
+//
+// Stated precisely, because the guarantee is narrower than it looks: the key is read at CONSTRUCTION
+// while the SDK binds the endpoint at a client's FIRST SEND and memoises it thereafter. So this
+// separates clients constructed either side of a change; it cannot help a client constructed before
+// a change whose first send happens after one. That residual is not reachable today - every client
+// built before the test harness starts is either unused or first sent while the harness is up - but
+// the key is not a faithful record of where a client is bound, and should not be read as one.
 const clients = new Map();
 
 function documentClient(awsRegion) {
@@ -57,10 +61,14 @@ function adapt(promise, onResolved, callback) {
 
 // Deletes call back with NO value, matching the package this replaced. That is not cosmetic:
 // async.waterfall forwards every argument after `err` to the next task, so a value here shifts that
-// task's arguments and binds its continuation to undefined. The symptom is an uncaught
-// "callback is not a function" thrown from a later callback - the request never answers and the
-// process dies - and it only appears on the SECOND write of a given device, because the first takes
-// the not-found branch. No test sees it if the stubs encode the old arity.
+// task's arguments and binds its continuation to undefined, and the symptom is an uncaught
+// "callback is not a function" - the request never answers and the process dies.
+//
+// It was device-measurements-populator that this crashed, on the second write of any device, since
+// only that service deletes inside a waterfall. This copy has no caller of removeBy at all; the
+// arity is kept identical because the two copies of this module are held byte-identical on purpose,
+// and a divergence introduced "because nothing here calls it" is how the next caller inherits the
+// bug.
 function adaptVoid(promise, callback) {
   promise.then(
     () => process.nextTick(() => callback(null)),
