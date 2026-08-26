@@ -1,5 +1,6 @@
 node_modules
-ContinuousIntegration
+aws
+scripts
 test
 .idea
 .jshintrc
@@ -7,5 +8,10 @@ test
 .git
 .gitignore
 .travis.yml
-Makefile
 README.md
+awscli-bundle*
+.python-version
+.serena
+.chunkhound
+.chunkhound.json
+.cache

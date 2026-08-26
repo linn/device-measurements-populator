@@ -1,5 +1,5 @@
 "use strict";
-var mockery = require('mockery');
+var proxyquire = require('proxyquire');
 
 var chai = require("chai");
 var sinon = require('sinon');
@@ -32,16 +32,18 @@ describe('Cloud Product Descriptor Manager', function () {
             removeBy: sinon.spy(function deleteFileFromStub(id, callback) { callback.apply(); })
         };
 
-        mockery.enable({ useCleanCache: true });
-        mockery.registerMock('./repositories/cloudProductDescriptorRepository', productDescriptorRepositoryStub);
-        mockery.registerMock('./repositories/fileDataRepository', cloudFileDataRepositoryStub);
-        mockery.warnOnUnregistered(false);
+        // proxyquire replaces mockery, whose only published versions all carry a critical
+        // prototype-pollution advisory with no fix. noCallThru keeps the previous behaviour -
+        // the stub stands in wholly rather than falling through to the real module - and
+        // '@global' keeps the other half of it: mockery substituted a module everywhere in the
+        // require graph, where proxyquire alone only substitutes the direct require. These
+        // subjects reach their repositories transitively, so without it the real module loads.
+        proxyquire.noCallThru();
 
-        sut = require('../cloudProductDescriptorManager');
-    });
-    afterEach(function () {
-        mockery.deregisterAll();
-        mockery.disable();
+        sut = proxyquire('../cloudProductDescriptorManager', {
+            './repositories/cloudProductDescriptorRepository': Object.assign(productDescriptorRepositoryStub, { '@global': true }),
+            './repositories/fileDataRepository': Object.assign(cloudFileDataRepositoryStub, { '@global': true })
+        });
     });
     describe('When adding with malformed product descriptor', function () {
         var productDescriptorId, data, resultError, result;
@@ -68,7 +70,7 @@ describe('Cloud Product Descriptor Manager', function () {
             expectedData = require('./data/cloudProductDescriptorResource.json');
 
             saveFileCallbackArgs[1] = {key: '5b61b280-bb73-11e4-ba72-9dec41bc3eb3', href:"http://linn.cloud.filedata.debug.s3.amazonaws.com/5b61b280-bb73-11e4-ba72-9dec41bc3eb3"};
-            loadFileCallbackArgs[0] = {code : "NoSuchKey"};
+            loadFileCallbackArgs[0] = Object.assign(new Error("NoSuchKey"), { name: "NoSuchKey" });
 
             sut.add(productDescriptorId, data, function (err, data) {
                 result = data;
@@ -98,7 +100,7 @@ describe('Cloud Product Descriptor Manager', function () {
             expectedData = require('./data/cloudProductDescriptorResource.json');
 
             saveFileCallbackArgs[1] = {key: '5b61b280-bb73-11e4-ba72-9dec41bc3eb3', href:"http://linn.cloud.filedata.debug.s3.amazonaws.com/5b61b280-bb73-11e4-ba72-9dec41bc3eb3"};
-            loadFileCallbackArgs[0] = {code : "NoSuchKey"};
+            loadFileCallbackArgs[0] = Object.assign(new Error("NoSuchKey"), { name: "NoSuchKey" });
             loadProductDescriptorCallbackArgs[1] = existingData;
 
             sut.add(productDescriptorId, data, function (err, data) {

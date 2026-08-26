@@ -6,7 +6,7 @@ var sinonChai = require('sinon-chai');
 var expect = chai.expect;
 chai.use(sinonChai);
 
-var mockery = require('mockery');
+var proxyquire = require('proxyquire');
 
 describe('Unpublishing Service', function () {
     var sut,
@@ -45,17 +45,19 @@ describe('Unpublishing Service', function () {
             removeBy: sinon.spy(function deleteCloudDeviceFromStub(productDescriptorId, serialNumber, callback) { callback.apply(); })
         };
 
-        mockery.enable({ useCleanCache: true });
-        mockery.registerMock('./cloudDeviceManager', cloudDeviceManagerStub);
-        mockery.registerMock('./cloudProductDescriptorManager', cloudProductDescriptorManagerStub);
-        mockery.registerMock('./repositories/cloudDeviceRepository', deviceRepositoryStub);
-        mockery.warnOnUnregistered(false);
+        // proxyquire replaces mockery, whose only published versions all carry a critical
+        // prototype-pollution advisory with no fix. noCallThru keeps the previous behaviour -
+        // the stub stands in wholly rather than falling through to the real module - and
+        // '@global' keeps the other half of it: mockery substituted a module everywhere in the
+        // require graph, where proxyquire alone only substitutes the direct require. These
+        // subjects reach their repositories transitively, so without it the real module loads.
+        proxyquire.noCallThru();
 
-        sut = require('../unpublishService');
-    });
-    afterEach(function () {
-        mockery.deregisterAll();
-        mockery.disable();
+        sut = proxyquire('../unpublishService', {
+            './cloudDeviceManager': Object.assign(cloudDeviceManagerStub, { '@global': true }),
+            './cloudProductDescriptorManager': Object.assign(cloudProductDescriptorManagerStub, { '@global': true }),
+            './repositories/cloudDeviceRepository': Object.assign(deviceRepositoryStub, { '@global': true })
+        });
     });
     describe('When deleting a product descriptor', function () {
         var result, productDescriptorId;

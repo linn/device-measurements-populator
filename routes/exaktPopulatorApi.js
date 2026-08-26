@@ -7,6 +7,11 @@ var helpers = require('../helpers');
 var _ = require('underscore');
 
 function parseProductDescriptorId(updateCloudProductDescriptorResource) {
+    // express 4 handed an unparsed body through as {}; express 5 leaves it undefined, which turned
+    // "wrong content type" from the 400 this contract promises into a 500 from a property read.
+    if (!updateCloudProductDescriptorResource) {
+        return void 0;
+    }
     var productDescriptorRel = _.findWhere(updateCloudProductDescriptorResource.links, { rel: 'product-descriptor' });
     if (productDescriptorRel) {
         return helpers.parseId(productDescriptorRel.href);
@@ -20,7 +25,7 @@ function checkValidProductDescriptorRequest(req) {
 }
 
 function checkValidDeviceRequest(req) {
-    return (checkValidProductDescriptorRequest(req) && (req.params.serialNumber === req.body.serialNumber));
+    return (checkValidProductDescriptorRequest(req) && !!req.body && (req.params.serialNumber === req.body.serialNumber));
 }
 
 module.exports.addDevice = function addDevice(req, res, next) {

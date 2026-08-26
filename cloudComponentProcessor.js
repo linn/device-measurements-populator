@@ -10,8 +10,12 @@ function addFileToRepository(file, callback) {
     async.waterfall([
         function addFileIfNotPresent(itercallback){
             fileDataRepository.findBy(file.id, function(err) {
-                if (err && err.code === "NoSuchKey") {
-                    fileDataRepository.addOrReplace(file.id, file.filename, new Buffer(file.data), itercallback);
+                // `name`, not `code`: the v2 SDK set both, v3 sets only `name` (and `Code`). Keyed on
+                // `code` this branch is dead and every file that is not already stored fails its PUT.
+                if (err && err.name === "NoSuchKey") {
+                    // Buffer.from, not new Buffer: `data` is a byte array here and the two are
+                    // equivalent for that, but new Buffer(number) returns uninitialised memory.
+                    fileDataRepository.addOrReplace(file.id, file.filename, Buffer.from(file.data), itercallback);
                 } else if (err) {
                     itercallback(err);
                 } else {

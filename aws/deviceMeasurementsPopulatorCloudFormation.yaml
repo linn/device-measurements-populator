@@ -2,8 +2,8 @@ Description: Device Measurements Populator Application
 AWSTemplateFormatVersion: '2010-09-09'
 Parameters:
   targetCluster:
-    Type: String
-    Description: ECS Cluster name within which this application should be run
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: Name of the SSM parameter holding the ECS cluster this application runs in
   dockerTag:
     Type: String
     Description: Docker tag to deploy
@@ -22,9 +22,32 @@ Parameters:
   productDescriptorsTableIndex:
     Type: String
     Description: DynamoDb index of product descriptors
-  albTargetGroupArn:
+  albTargetGroupArnExport:
     Type: String
-    Description: Target Group ARN for device details api
+    Description: Name of the CloudFormation export holding this service's ALB target group ARN
+  legacyAlbTargetGroupArn:
+    Type: String
+    MinLength: 1
+    AllowedPattern: '^none$|^arn:aws:elasticloadbalancing:[a-z0-9-]+:[0-9]{12}:targetgroup/[A-Za-z0-9-]{1,32}/[0-9a-f]{16}$'
+    ConstraintDescription: >-
+      must be either the lowercase word none, or an elasticloadbalancing target-group ARN in the aws
+      partition. An empty value is rejected by MinLength rather than by the pattern, which
+      CloudFormation does not apply to an empty string - say none to mean it.
+    Description: >-
+      ARN of a second, pre-existing target group to register this service with alongside the one above,
+      or the word none. Supplying an ARN lets a consumer be repointed from one load balancer to the other
+      without a window in which neither answers.
+      Deliberately has NO default, and the pattern rejects an empty string: a caller must state which it
+      means. Every deploy must pass this explicitly - `aws cloudformation deploy` sends
+      UsePreviousValue for any parameter it is not given, so on an existing stack an omitted value is
+      retained rather than reset, and dual-homing set once by hand would otherwise persist unnoticed
+      through every later deploy.
+
+Conditions:
+  # Keyed on whether a second target group was supplied rather than on an environment name: what varies
+  # is the routing, and an environment is only a proxy for it.
+  isDualHomed: !Not [!Equals [!Ref legacyAlbTargetGroupArn, 'none']]
+
 Resources:
   taskDefinitionRole:
     Type: AWS::IAM::Role
@@ -117,7 +140,8 @@ Resources:
             - ''
             - - 'docker.io/linn/device-measurements-populator:'
               - !Ref 'dockerTag'
-          Memory: '100'
+          MemoryReservation: 200
+          Memory: 400
           PortMappings:
             - ContainerPort: 3000
           Environment:
@@ -143,8 +167,20 @@ Resources:
       Cluster: !Ref 'targetCluster'
       DesiredCount: '1'
       TaskDefinition: !Ref 'taskDefinition'
-      Role: ecsServiceRole
+      # No Role. A service registered with more than one target group must use the ECS service-linked
+      # role, which is what is used when Role is absent; naming a custom service role caps the service
+      # at one target group.
       LoadBalancers:
         - ContainerName: device-measurements-populator
           ContainerPort: 3000
-          TargetGroupArn: !Ref 'albTargetGroupArn'
+          TargetGroupArn:
+            Fn::ImportValue: !Ref albTargetGroupArnExport
+        # AWS::NoValue removes the element entirely, so the two registrations are stated once each
+        # rather than a whole list per branch - nothing checks that duplicated copies of a container
+        # name and port agree.
+        - !If
+          - isDualHomed
+          - ContainerName: device-measurements-populator
+            ContainerPort: 3000
+            TargetGroupArn: !Ref legacyAlbTargetGroupArn
+          - !Ref 'AWS::NoValue'

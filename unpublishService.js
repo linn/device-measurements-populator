@@ -20,7 +20,10 @@ module.exports.unpublish = function removeProductDescriptorAndDevices(productDes
             });
         },
         function removeExistingDevices(devices, iterCallback) {
-            async.each(_.pluck(devices, 'serialNumber'), function removeCloudDevice(serialNumber, jterCallback) {
+            // Bounded. Paging to exhaustion raised the largest descriptor group from roughly 749
+            // devices to 1,571, each doing a read and a delete, and the SDK's default agent keeps
+            // 50 sockets - an unbounded fan-out here turns a large group into connection timeouts.
+            async.eachLimit(_.pluck(devices, 'serialNumber'), 10, function removeCloudDevice(serialNumber, jterCallback) {
                 cloudDeviceManager.remove(productDescriptorId, serialNumber, jterCallback);
             }, function (err) {
                 if (err) {

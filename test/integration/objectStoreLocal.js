@@ -1,0 +1,108 @@
+"use strict";
+
+// Runtime precondition: docker must be running and able to pull `minio/minio`. Travis already
+// declares docker as a service for this repository.
+//
+// The endpoint is published as an IP rather than a hostname on purpose. The SDK addresses a bucket
+// virtual-host style by default, which no local S3 implementation serves; against a bare IP it has
+// no choice but path style, so the production client needs no forcePathStyle option and therefore
+// carries no test seam.
+//
+// As with the DynamoDB harness, this fails loudly rather than skipping when docker is absent.
+
+const { execFileSync } = require("child_process");
+const net = require("net");
+const { S3Client, CreateBucketCommand, ListBucketsCommand } = require("@aws-sdk/client-s3");
+
+// Pinned by digest, not by tag. An untagged image is :latest, so the round trips these
+// specs make would be validating against whatever the registry served that day - and the
+// whole point of them is to be the fixed reference the production code is compared to.
+const IMAGE = "minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e";
+const ENV_KEYS = ["AWS_ENDPOINT_URL_S3", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"];
+
+function freePort() {
+    const server = net.createServer();
+    server.listen(0);
+    const port = server.address().port;
+    server.close();
+    return port;
+}
+
+function docker(args) {
+    // execFileSync blocks the event loop, so mocha's own timeout cannot fire while it runs.
+    return execFileSync("docker", args, {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 180000,
+        killSignal: "SIGKILL",
+    }).trim();
+}
+
+function restore(saved) {
+    ENV_KEYS.forEach(function (name) {
+        if (saved[name] === undefined) { delete process.env[name]; }
+        else { process.env[name] = saved[name]; }
+    });
+}
+
+async function waitUntilAnswering(client, deadlineMs) {
+    const giveUpAt = Date.now() + deadlineMs;
+    for (;;) {
+        try {
+            await client.send(new ListBucketsCommand({}));
+            return;
+        } catch (err) {
+            if (Date.now() > giveUpAt) {
+                throw new Error("MinIO did not answer within " + deadlineMs + "ms: " + err.message);
+            }
+            await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+    }
+}
+
+module.exports = {
+    start: async function startObjectStore(buckets) {
+        const port = freePort();
+        // Saved and restored rather than overwritten: a developer or CI agent with real credentials
+        // exported would otherwise run every later spec as localkey/localsecret against real AWS.
+        const saved = {};
+        ENV_KEYS.forEach(function (name) { saved[name] = process.env[name]; });
+
+        const containerId = docker([
+            "run", "-d", "--rm", "-p", "127.0.0.1:" + port + ":9000",
+            "-e", "MINIO_ROOT_USER=localkey", "-e", "MINIO_ROOT_PASSWORD=localsecret",
+            IMAGE, "server", "/data",
+        ]);
+
+        const reap = function () {
+            try { docker(["rm", "-f", containerId]); } catch (ignored) { /* already gone */ }
+        };
+        process.once("exit", reap);
+
+        process.env.AWS_ENDPOINT_URL_S3 = "http://127.0.0.1:" + port;
+        process.env.AWS_ACCESS_KEY_ID = "localkey";
+        process.env.AWS_SECRET_ACCESS_KEY = "localsecret";
+
+        const admin = new S3Client({ region: "eu-west-1" });
+
+        try {
+            await waitUntilAnswering(admin, 60000);
+            for (const bucket of buckets) {
+                await admin.send(new CreateBucketCommand({ Bucket: bucket }));
+            }
+        } catch (err) {
+            process.removeListener("exit", reap);
+            reap();
+            restore(saved);
+            throw err;
+        }
+
+        return {
+            port: port,
+            stop: function stopObjectStore() {
+                process.removeListener("exit", reap);
+                try { reap(); } finally { restore(saved); }
+            },
+        };
+    },
+};
