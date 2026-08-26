@@ -5,7 +5,22 @@ node_js:
 sudo: required
 services:
   - docker
-before_script:
+before_install:
+  # In before_install, and that is the point. This repository declares no `install:` key, so Travis runs
+  # its own for `language: node_js`, and that default install happens BEFORE before_script. A gate
+  # ordered there would be reporting on a tree whose dependencies had already run their install scripts,
+  # on a machine holding this build's credentials - the one thing it exists to prevent.
+  #
+  # The registry login moved up with it rather than being duplicated: the gate image is private, so the
+  # gate cannot run before the login.
   - docker login -u $DOCKER_HUB_USERNAME -p $DOCKER_HUB_PASSWORD
+  - ./scripts/malware-gate.sh
+before_script:
+  # The AWS CLI is not on the noble image, and scripts/deploy.sh needs it.
+  - pyenv install -s 3.10.13
+  - pyenv local 3.10
+  - curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip"
+  - unzip awscli-bundle.zip
+  - ./awscli-bundle/install -b ~/bin/aws
 script:
-  - bash scripts/ci.sh
+  - ./scripts/ci.sh
