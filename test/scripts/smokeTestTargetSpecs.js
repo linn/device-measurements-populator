@@ -11,10 +11,9 @@ var execFileSync = require('child_process').execFileSync;
 // Which addresses a --target resolves to, asserted through the real scripts/smoke-test.sh rather than
 // by reading its table.
 //
-// curl is replaced by a recorder that fails, so the reachability phase reports every endpoint as
-// unreachable and the script exits before it writes anything. That is what makes a PRODUCTION target
-// safe to assert on here: the recorded calls are the addresses it was about to use, and no request
-// ever leaves the machine.
+// curl is replaced by a recorder, so nothing leaves the machine and a PRODUCTION target is safe to
+// assert on here. The addresses are taken from the requests the script actually makes - the publish and
+// the read-back - rather than from a probe, because there is no longer a probe to read them from.
 //
 // PRECONDITION: bash and node on PATH. No network, no AWS.
 describe('smoke-test target resolution', function () {
@@ -30,14 +29,20 @@ describe('smoke-test target resolution', function () {
         );
         calls = path.join(workDir, 'calls.txt');
 
-        // Records every argument and fails, so `request` yields "curl-failed" and the run stops at the
-        // reachability gate. Recording ALL arguments rather than just URLs is what lets a test assert
-        // that nothing was requested at all.
+        // Records every URL argument and answers 200 with an empty body, so the script walks its whole
+        // sequence instead of stopping at the first request. Only URLs are recorded: a payload contains
+        // newlines and would corrupt a line-per-call log.
         var stub = path.join(workDir, 'bin', 'curl');
         fs.writeFileSync(stub, [
             '#!/bin/bash',
-            'printf "%s\\n" "$*" >> "' + calls + '"',
-            'exit 7',
+            'out=; prev=',
+            'for a in "$@"; do',
+            '  case "$a" in http://*|https://*) printf "%s\\n" "$a" >> "' + calls + '" ;; esac',
+            '  [ "$prev" = "-o" ] && out="$a"',
+            '  prev="$a"',
+            'done',
+            '[ -n "$out" ] && printf "{}" > "$out"',
+            'printf "%s" "${STUB_STATUS:-200}"',
             ''
         ].join('\n'));
         fs.chmodSync(stub, 0o755);
@@ -49,66 +54,72 @@ describe('smoke-test target resolution', function () {
 
     // PATH is PREPENDED rather than replaced: the script needs the real node, mktemp and coreutils, and
     // only curl is being shadowed.
-    function run(args) {
+    function run(args, stubEnv) {
         var status = 0;
         var stderr = '';
+        var stdout = '';
         try {
             execFileSync('bash', ['scripts/smoke-test.sh'].concat(args), {
                 cwd: workDir,
                 env: Object.assign({}, process.env, {
                     PATH: path.join(workDir, 'bin') + path.delimiter + process.env.PATH
-                }),
-                stdio: 'pipe'
+                }, stubEnv || {}),
+                stdio: 'pipe',
+                encoding: 'utf8'
             });
         } catch (err) {
             status = err.status;
             stderr = String(err.stderr || '');
+            stdout = String(err.stdout || '');
         }
         return {
             status: status,
             stderr: stderr,
+            stdout: stdout,
             requested: fs.existsSync(calls)
-                ? fs.readFileSync(calls, 'utf8').trim().split('\n')
+                ? fs.readFileSync(calls, 'utf8').trim().split('\n').filter(Boolean)
                 : []
         };
     }
 
-    // The addresses attempted during the reachability phase, in order, without curl's other flags.
-    function pinged(result) {
-        return result.requested
-            .map(function (line) {
-                var match = line.match(/(https?:\/\/[^\s]*\/ping)/);
-                return match ? match[1] : null;
-            })
-            .filter(function (url) { return url !== null; });
+    // The base addresses actually used, in the order first seen. Split by the path each service owns,
+    // so a populator address and a measurements address cannot be confused for one another.
+    function basesUsed(result, marker) {
+        var seen = [];
+        result.requested.forEach(function (url) {
+            var at = url.indexOf(marker);
+            if (at === -1) { return; }
+            var base = url.slice(0, at);
+            if (seen.indexOf(base) === -1) { seen.push(base); }
+        });
+        return seen;
     }
+
+    function populators(result)   { return basesUsed(result, '/cloud-product-descriptors/'); }
+    function measurements(result) { return basesUsed(result, '/device-measurements/'); }
 
     describe('a named deployment', function () {
         it('resolves sys to the app-sys populator and the beta-cloud measurements api', function () {
             var result = run(['--target', 'sys']);
 
-            expect(pinged(result)).to.deep.equal([
-                'https://app-sys.linn.co.uk/ping',
-                'https://beta-cloud.linn.co.uk/ping'
-            ]);
+            expect(populators(result)).to.deep.equal(['https://app-sys.linn.co.uk']);
+            expect(measurements(result)).to.deep.equal(['https://beta-cloud.linn.co.uk']);
         });
 
         it('resolves prod-new to the app populator and the cloud measurements api', function () {
             var result = run(['--target', 'prod-new', '--yes-write-to-prod']);
 
-            expect(pinged(result)).to.deep.equal([
-                'https://app.linn.co.uk/ping',
-                'https://cloud.linn.co.uk/ping'
-            ]);
+            expect(populators(result)).to.deep.equal(['https://app.linn.co.uk']);
+            expect(measurements(result)).to.deep.equal(['https://cloud.linn.co.uk']);
         });
 
         it('resolves prod-old to the ecs-internal populator over plain http, which is all it listens on', function () {
             var result = run(['--target', 'prod-old', '--yes-write-to-prod']);
 
-            expect(pinged(result)).to.deep.equal([
-                'http://internal-ecs-internal-288575285.eu-west-1.elb.amazonaws.com/ping',
-                'https://cloud.linn.co.uk/ping'
+            expect(populators(result)).to.deep.equal([
+                'http://internal-ecs-internal-288575285.eu-west-1.elb.amazonaws.com'
             ]);
+            expect(measurements(result)).to.deep.equal(['https://cloud.linn.co.uk']);
         });
 
         // The case that separates prod-dual from prod-new: both name the app populator and the cloud
@@ -117,11 +128,11 @@ describe('smoke-test target resolution', function () {
         it('resolves prod-dual to BOTH prod populators, which is what makes it the dual-homing check', function () {
             var result = run(['--target', 'prod-dual', '--yes-write-to-prod']);
 
-            expect(pinged(result)).to.deep.equal([
-                'https://app.linn.co.uk/ping',
-                'http://internal-ecs-internal-288575285.eu-west-1.elb.amazonaws.com/ping',
-                'https://cloud.linn.co.uk/ping'
+            expect(populators(result)).to.deep.equal([
+                'https://app.linn.co.uk',
+                'http://internal-ecs-internal-288575285.eu-west-1.elb.amazonaws.com'
             ]);
+            expect(measurements(result)).to.deep.equal(['https://cloud.linn.co.uk']);
         });
     });
 
@@ -176,6 +187,27 @@ describe('smoke-test target resolution', function () {
         });
     });
 
+    // The failure Iain actually hit running --target sys against the real deployment: /ping was in no
+    // listener rule, so the load balancer answered its default instead of the service. The probe that
+    // provoked it is gone, but the same status can still come back from a publish, and a bare "-> 302"
+    // sends a reader hunting for a fault in a service that never saw the request.
+    describe('a load balancer answering instead of the service', function () {
+        ['302', '403', '401'].forEach(function (status) {
+            it('explains a ' + status + ' as a routing gap rather than reporting it bare', function () {
+                var result = run(['--target', 'sys'], { STUB_STATUS: status });
+
+                expect(result.stdout).to.contain("the load balancer's default action");
+                expect(result.stdout).to.contain('check a listener rule forwards this path');
+            });
+        });
+
+        it('does not explain away a genuine service error', function () {
+            var result = run(['--target', 'sys'], { STUB_STATUS: '500' });
+
+            expect(result.stdout).to.not.contain("the load balancer's default action");
+        });
+    });
+
     describe('the explicit form', function () {
         it('is unchanged by the shorthand existing', function () {
             var result = run([
@@ -184,17 +216,15 @@ describe('smoke-test target resolution', function () {
                 '--measurements', 'http://measurements.example'
             ]);
 
-            expect(pinged(result)).to.deep.equal([
-                'http://populator.example/ping',
-                'http://measurements.example/ping'
-            ]);
+            expect(populators(result)).to.deep.equal(['http://populator.example']);
+            expect(measurements(result)).to.deep.equal(['http://measurements.example']);
         });
 
         it('still adds addresses given alongside a target', function () {
             var result = run(['--target', 'sys', '--populator', 'http://extra.example']);
 
-            expect(pinged(result)).to.include('http://extra.example/ping');
-            expect(pinged(result)).to.include('https://app-sys.linn.co.uk/ping');
+            expect(populators(result)).to.include('https://app-sys.linn.co.uk');
+            expect(populators(result)).to.include('http://extra.example');
         });
     });
 });

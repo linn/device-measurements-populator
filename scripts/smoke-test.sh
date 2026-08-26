@@ -20,12 +20,17 @@
 # It weakens no refusal: a prod target still requires --yes-write-to-prod. It cannot be combined with
 # --env, and may be given once. Anything not listed above is refused rather than guessed at.
 #
-# Both --populator and --measurements are REPEATABLE. Every endpoint given is pinged and reported, a
-# full publish/read/remove cycle runs through each populator, and each cycle is read back through every
-# measurements endpoint. That is what makes this usable as the check on a dual-homed deployment: while
-# the service is registered with two target groups on two load balancers, passing both addresses proves
-# each one reaches a live instance, that they are serving the same build, and that a write through
-# either is visible through either.
+# Both --populator and --measurements are REPEATABLE. A full publish/read/remove cycle runs through each
+# populator, and each cycle is read back through every measurements endpoint. That is what makes this
+# usable as the check on a dual-homed deployment: while the service is registered with two target groups
+# on two load balancers, passing both addresses proves each one reaches a live instance and that a write
+# through either is visible through either.
+#
+# There is no separate reachability probe. The obvious one would be /ping, and no load balancer forwards
+# it: the listener rules carry /cloud-devices/*, /cloud-product-descriptors/* and /device-measurements/*
+# and nothing else, so /ping reaches an app only from inside the VPC, straight at a container. The
+# publish is the reachability test - it is non-destructive when it fails, and it reports the write path
+# rather than a proxy for it.
 #
 # WHAT IT WRITES, AND WHY IT IS SAFE TO RUN AGAINST PRODUCTION
 #
@@ -181,6 +186,19 @@ bad ()  { printf '   FAIL  %s\n' "$*" >&2; FAILURES=$((FAILURES + 1)); }
 
 # Strips a trailing slash so a base URL is accepted with or without one.
 base () { printf '%s' "${1%/}"; }
+
+# A redirect or an authorisation refusal on these paths is characteristically the load balancer's default
+# action rather than the service: every rule fronting these two applications matches on path, so a path
+# that matches none of them never reaches a container. Named here because the status alone sends a reader
+# looking for a fault in the service, which is the one place it will not be.
+explain_status () {
+	case "$1" in
+		3??|401|403)
+			say "        a $1 on this path is usually the load balancer's default action, not $2 -"
+			say "        check a listener rule forwards this path to the service's target group."
+			;;
+	esac
+}
 
 # ------------------------------------------------------------------------------------------- http
 #
@@ -345,45 +363,6 @@ trap on_exit EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-# ------------------------------------------------------------------------------- phase 1: reachability
-#
-# Every endpoint, before anything is written. /ping carries the build number the running image was built
-# from, which is what turns "both addresses answered" into "both addresses reach the same deployment" -
-# the question a dual-homed cutover actually needs answered.
-step "reachability and build identity"
-BUILDS=
-for url in $POPULATOR_URLS $MEASUREMENTS_URLS; do
-	url=$(base "$url")
-	status=$(request GET "$url/ping")
-	if [ "$status" = "200" ]; then
-		build=$(node -e '
-			let raw = "";
-			try { raw = require("fs").readFileSync(process.argv[1], "utf8"); } catch (e) { process.stdout.write("unreadable"); process.exit(0); }
-			try {
-				const ping = JSON.parse(raw);
-				process.stdout.write(String(ping.build || "unstamped") + " (" + String(ping.commit || "no commit").slice(0, 12) + ")");
-			} catch (e) { process.stdout.write("unparseable"); }
-		' "$BODY_FILE")
-		ok "$url -> build $build"
-		BUILDS="$BUILDS $(printf '%s' "$build" | cut -d' ' -f1)"
-	else
-		bad "$url/ping -> $status"
-	fi
-done
-
-if [ "$FAILURES" -gt 0 ]; then
-	say ""
-	say "Not every endpoint answered, so nothing has been written. Fix reachability first."
-	exit 1
-fi
-
-DISTINCT_BUILDS=$(printf '%s' "$BUILDS" | tr ' ' '\n' | grep -v '^$' | sort -u | wc -l | tr -d ' ')
-if [ "$DISTINCT_BUILDS" -gt 1 ]; then
-	say ""
-	say "   NOTE  the endpoints are serving $DISTINCT_BUILDS different builds. Expected while a deployment is"
-	say "         in flight or when comparing two load balancers mid-cutover; not expected otherwise."
-fi
-
 # ------------------------------------------------------------- phase 2: publish, read back, remove
 for populator in $POPULATOR_URLS; do
 	populator=$(base "$populator")
@@ -399,6 +378,7 @@ for populator in $POPULATOR_URLS; do
 	else
 		bad "publishing the product descriptor -> $status"
 		say "        $(head -c 300 "$BODY_FILE")"
+		explain_status "$status" "$populator"
 		break
 	fi
 
@@ -409,6 +389,7 @@ for populator in $POPULATOR_URLS; do
 	else
 		bad "publishing the device -> $status"
 		say "        $(head -c 300 "$BODY_FILE")"
+		explain_status "$status" "$populator"
 		break
 	fi
 
