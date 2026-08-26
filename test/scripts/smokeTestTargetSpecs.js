@@ -51,6 +51,7 @@ describe('smoke-test target resolution', function () {
     // only curl is being shadowed.
     function run(args) {
         var status = 0;
+        var stderr = '';
         try {
             execFileSync('bash', ['scripts/smoke-test.sh'].concat(args), {
                 cwd: workDir,
@@ -61,9 +62,11 @@ describe('smoke-test target resolution', function () {
             });
         } catch (err) {
             status = err.status;
+            stderr = String(err.stderr || '');
         }
         return {
             status: status,
+            stderr: stderr,
             requested: fs.existsSync(calls)
                 ? fs.readFileSync(calls, 'utf8').trim().split('\n')
                 : []
@@ -135,11 +138,18 @@ describe('smoke-test target resolution', function () {
             });
         });
 
-        it('refuses a target it does not know rather than running with no addresses', function () {
+        // Asserted on the MESSAGE, not on the exit code. An unknown target leaves the environment
+        // unset, so the pre-existing --env validation would refuse it anyway, with the same status and
+        // the same absence of requests - an outcome-only assertion here passes with this arm deleted
+        // and pins nothing. What the arm buys is a diagnosis that names the flag the caller actually
+        // typed, and that is the only thing that distinguishes the two paths.
+        it('names the unknown target and the known ones, rather than complaining about --env', function () {
             var result = run(['--target', 'staging']);
 
             expect(result.status).to.equal(64);
             expect(result.requested).to.deep.equal([]);
+            expect(result.stderr).to.contain("--target 'staging' is not a known deployment");
+            expect(result.stderr).to.contain('sys, prod-new, prod-old, prod-dual');
         });
 
         // Both orders, deliberately. A check made inside the --target arm alone would accept
