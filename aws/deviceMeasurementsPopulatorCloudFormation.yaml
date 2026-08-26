@@ -25,6 +25,20 @@ Parameters:
   albTargetGroupArnExport:
     Type: String
     Description: Name of the CloudFormation export holding this service's ALB target group ARN
+  legacyAlbTargetGroupArn:
+    Type: String
+    Default: ''
+    Description: >-
+      ARN of a second, pre-existing target group to register this service with alongside the one above.
+      Supplying it lets a consumer be repointed from one load balancer to the other without a window in
+      which neither answers; leaving it empty registers the service with the target group above alone.
+
+Conditions:
+  # Keyed on whether a second target group was supplied rather than on an environment name: what varies
+  # is the routing, and an environment is only a proxy for it. Retiring the second target group is then
+  # a matter of ceasing to supply it.
+  isDualHomed: !Not [!Equals [!Ref legacyAlbTargetGroupArn, '']]
+
 Resources:
   taskDefinitionRole:
     Type: AWS::IAM::Role
@@ -143,9 +157,19 @@ Resources:
       Cluster: !Ref 'targetCluster'
       DesiredCount: '1'
       TaskDefinition: !Ref 'taskDefinition'
-      Role: ecsServiceRole
-      LoadBalancers:
-        - ContainerName: device-measurements-populator
-          ContainerPort: 3000
-          TargetGroupArn:
-            Fn::ImportValue: !Ref albTargetGroupArnExport
+      # No Role. A service registered with more than one target group must use the ECS service-linked
+      # role, which is what is used when Role is absent; naming a custom service role caps the service
+      # at one target group.
+      LoadBalancers: !If
+        - isDualHomed
+        - - ContainerName: device-measurements-populator
+            ContainerPort: 3000
+            TargetGroupArn:
+              Fn::ImportValue: !Ref albTargetGroupArnExport
+          - ContainerName: device-measurements-populator
+            ContainerPort: 3000
+            TargetGroupArn: !Ref legacyAlbTargetGroupArn
+        - - ContainerName: device-measurements-populator
+            ContainerPort: 3000
+            TargetGroupArn:
+              Fn::ImportValue: !Ref albTargetGroupArnExport
