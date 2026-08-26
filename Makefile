@@ -1,5 +1,8 @@
 DOCKER := linn/device-measurements-populator
-DOCKER_BRANCH_TAG := $(shell echo ${TRAVIS_BRANCH} | sed s/\#/_/g)
+# A docker tag may not contain '/', and branch names routinely do - so a branch build of
+# feat/anything produced `invalid reference format` and failed before any test ran. The class
+# is spelled out rather than added to as each new character bites.
+DOCKER_BRANCH_TAG := $(shell echo ${TRAVIS_BRANCH} | sed 's/[^A-Za-z0-9._-]/_/g')
 TIMESTAMP := $(shell date --utc +%FT%TZ)
 PINGJSON := ping.json
 

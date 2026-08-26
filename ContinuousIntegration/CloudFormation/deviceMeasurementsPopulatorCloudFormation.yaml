@@ -111,6 +111,10 @@ Resources:
       TaskRoleArn: !GetAtt 'taskDefinitionRole.Arn'
       ContainerDefinitions:
         - Name: device-measurements-populator
+          # Declared rather than left to the ECS agent default, because the shutdown budget in
+          # shutdownConfig.js sits beneath it and that bound must not rest on a setting this
+          # repository cannot see. Binds on agent 1.26.0 or later.
+          StopTimeout: 30
           Cpu: '1'
           Essential: 'true'
           Image: !Join
