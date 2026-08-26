@@ -5,8 +5,20 @@
 # device-measurements-api, then remove both and prove they are gone.
 #
 # Usage:
+#   smoke-test.sh --target sys
+#   smoke-test.sh --target prod-dual --yes-write-to-prod
 #   smoke-test.sh --env sys   --populator URL --measurements URL
 #   smoke-test.sh --env prod  --populator URL --measurements URL --yes-write-to-prod
+#
+# --target names a known deployment and fills in the environment and both addresses:
+#
+#   sys        populator app-sys       -> measurements beta-cloud
+#   prod-new   populator app           -> measurements cloud
+#   prod-old   populator ecs-internal  -> measurements cloud
+#   prod-dual  BOTH prod populators    -> measurements cloud   (the dual-homing check)
+#
+# It weakens no refusal: a prod target still requires --yes-write-to-prod. It cannot be combined with
+# --env, and may be given once. Anything not listed above is refused rather than guessed at.
 #
 # Both --populator and --measurements are REPEATABLE. Every endpoint given is pinged and reported, a
 # full publish/read/remove cycle runs through each populator, and each cycle is read back through every
@@ -45,10 +57,64 @@ POPULATOR_URLS=
 MEASUREMENTS_URLS=
 PROD_ACKNOWLEDGED=no
 KEEP=no
+ENV_GIVEN=no
+TARGET_GIVEN=
+
+# The live routing, read from AWS rather than assembled from a naming convention - the two halves are
+# not addressed the same way and cannot be derived from each other:
+#
+#   - the populator target groups sit on INTERNAL load balancers whose listener rules match on PATH
+#     alone, so any name resolving to the load balancer reaches them;
+#   - the measurements listener rules match on HOST HEADER, so those entries must be the hostname. An
+#     ALB address substituted there resolves and connects and then does not match any rule.
+#
+# prod-old is the only one with no hostname: its load balancer is reached by the raw ELB DNS its caller
+# hardcodes, and it listens on HTTP:80 only.
+#
+# There is deliberately no int target. No int measurements-api exists, so a publish through the int
+# populator could not be read back and the run could not complete.
+apply_target () {
+	case "$1" in
+		sys)
+			ENVIRONMENT=sys
+			POPULATOR_URLS="$POPULATOR_URLS https://app-sys.linn.co.uk"
+			MEASUREMENTS_URLS="$MEASUREMENTS_URLS https://beta-cloud.linn.co.uk"
+			;;
+		prod-new)
+			ENVIRONMENT=prod
+			POPULATOR_URLS="$POPULATOR_URLS https://app.linn.co.uk"
+			MEASUREMENTS_URLS="$MEASUREMENTS_URLS https://cloud.linn.co.uk"
+			;;
+		prod-old)
+			ENVIRONMENT=prod
+			POPULATOR_URLS="$POPULATOR_URLS http://internal-ecs-internal-288575285.eu-west-1.elb.amazonaws.com"
+			MEASUREMENTS_URLS="$MEASUREMENTS_URLS https://cloud.linn.co.uk"
+			;;
+		prod-dual)
+			ENVIRONMENT=prod
+			POPULATOR_URLS="$POPULATOR_URLS https://app.linn.co.uk http://internal-ecs-internal-288575285.eu-west-1.elb.amazonaws.com"
+			MEASUREMENTS_URLS="$MEASUREMENTS_URLS https://cloud.linn.co.uk"
+			;;
+		*)
+			echo "--target '$1' is not a known deployment. Known: sys, prod-new, prod-old, prod-dual." >&2
+			exit 64
+			;;
+	esac
+}
 
 while [ $# -gt 0 ]; do
 	case "$1" in
-		--env)          ENVIRONMENT="${2:?--env needs a value}"; shift 2 ;;
+		--env)          ENVIRONMENT="${2:?--env needs a value}"; ENV_GIVEN=yes; shift 2 ;;
+		# Refused rather than merged: two targets would silently produce a four-endpoint run, and a
+		# second one naming a different environment would leave whichever ran last deciding where the
+		# writes land.
+		--target)
+			[ -z "$TARGET_GIVEN" ] \
+				|| { echo "--target given twice ('$TARGET_GIVEN' then '${2:-}') - name one deployment, or use --populator/--measurements directly" >&2; exit 64; }
+			TARGET_GIVEN="${2:?--target needs a value}"
+			apply_target "$TARGET_GIVEN"
+			shift 2
+			;;
 		--populator)    POPULATOR_URLS="$POPULATOR_URLS ${2:?--populator needs a URL}"; shift 2 ;;
 		--measurements) MEASUREMENTS_URLS="$MEASUREMENTS_URLS ${2:?--measurements needs a URL}"; shift 2 ;;
 		--yes-write-to-prod) PROD_ACKNOWLEDGED=yes; shift ;;
@@ -60,6 +126,11 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
+# After the loop rather than in it: checked in the --target arm alone, `--env prod --target sys` would
+# pass while `--target sys --env prod` would not, and the two orders mean the same thing.
+[ -n "$TARGET_GIVEN" ] && [ "$ENV_GIVEN" = yes ] \
+	&& { echo "--target and --env cannot be combined - --target already states the environment" >&2; exit 64; }
+
 case "$ENVIRONMENT" in
 	sys) ;;
 	prod)
@@ -67,7 +138,7 @@ case "$ENVIRONMENT" in
 		# confirmation. Refusing here rather than trusting the hostname keeps a copy-pasted prod address
 		# under --env sys from writing to production unremarked.
 		[ "$PROD_ACKNOWLEDGED" = yes ] \
-			|| { echo "--env prod writes a throwaway descriptor and device to PRODUCTION. Re-run with --yes-write-to-prod if that is what you mean." >&2; exit 1; }
+			|| { echo "this writes a throwaway descriptor and device to PRODUCTION. Re-run with --yes-write-to-prod if that is what you mean." >&2; exit 1; }
 		;;
 	*) echo "--env must be sys or prod (got '${ENVIRONMENT}')" >&2; usage ;;
 esac
