@@ -26,6 +26,10 @@ case "$ENVIRONMENT" in
     EXPIRE_FILE_DATA_TABLE=linn.cloud.expire-s3-objects.int
     DEVICE_FILE_DATA_BUCKET=linn.cloud.filedata.int
     TARGET_GROUP_ARN_EXPORT=measurements-populator-target-group-arn-sys
+    # sys has no load balancer to be moved off, so it registers with one target group. Stated
+    # explicitly on every deploy, never omitted: `aws cloudformation deploy` sends UsePreviousValue for
+    # a parameter it is not given, so omitting this would retain whatever the stack last held.
+    LEGACY_TARGET_GROUP_ARN=none
     ;;
   *)
     echo "deploy.sh: '$ENVIRONMENT' is not deployable from here; only sys is." >&2
@@ -44,6 +48,7 @@ aws cloudformation deploy \
       dockerTag="$DOCKER_TAG" \
       targetCluster="LinnApiClusterName-$ENVIRONMENT" \
       albTargetGroupArnExport="$TARGET_GROUP_ARN_EXPORT" \
+      legacyAlbTargetGroupArn="$LEGACY_TARGET_GROUP_ARN" \
       devicesTableName="$DEVICES_TABLE" \
       productDescriptorsTableName="$PRODUCT_DESCRIPTORS_TABLE" \
       productDescriptorsTableIndex="$PRODUCT_DESCRIPTORS_TABLE_INDEX" \

@@ -10,3 +10,8 @@ test
 .travis.yml
 README.md
 awscli-bundle*
+.python-version
+.serena
+.chunkhound
+.chunkhound.json
+.cache

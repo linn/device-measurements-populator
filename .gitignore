@@ -14,5 +14,6 @@ bower_components
 .chunkhound.json
 .cache/
 
-# Unpacked by CI before the build; never committed
+# Written by CI before the build; never committed
 awscli-bundle*
+.python-version

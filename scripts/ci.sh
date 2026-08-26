@@ -27,11 +27,23 @@ fi
 
 # A pull-request build reports the branch it TARGETS, not the branch it comes from, so a pull request
 # into the default branch is what identifies "about to be merged" - and that is what gets sys.
-if [ "${TRAVIS_PULL_REQUEST}" != "false" ]; then
-  echo "PR BUILD - deploying sys"
-  ./deploy.sh sys "$TRAVIS_BUILD_NUMBER"
-else
-  # Prod is deployed by hand: its target-group arrangement differs from sys, so a prod deploy is a
-  # cutover rather than a like-for-like release. See deploy.sh.
-  echo "MASTER BUILD - image published; prod is deployed by hand"
-fi
+#
+# Matched exhaustively rather than tested against "false", because absence must not read as "this is a
+# pull request". This is the only arm that touches AWS, so it is the one place an unset or malformed
+# value must refuse instead of proceeding - a CI shim that sets TRAVIS_BRANCH and forgets this variable
+# would otherwise deploy.
+case "${TRAVIS_PULL_REQUEST}" in
+  false)
+    # Prod is deployed by hand: its target-group arrangement differs from sys, so a prod deploy is a
+    # cutover rather than a like-for-like release. See deploy.sh.
+    echo "MASTER BUILD - image published; prod is deployed by hand"
+    ;;
+  *[!0-9]*|'')
+    echo "TRAVIS_PULL_REQUEST is '${TRAVIS_PULL_REQUEST}' - neither 'false' nor a pull-request number, so refusing rather than guessing whether to deploy" >&2
+    exit 1
+    ;;
+  *)
+    echo "PR BUILD - deploying sys"
+    ./deploy.sh sys "$TRAVIS_BUILD_NUMBER"
+    ;;
+esac

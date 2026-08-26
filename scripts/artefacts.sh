@@ -5,8 +5,10 @@
 # The disable above covers "appears unused" - every value here is consumed by the scripts that source
 # it, which the linter cannot see from this file alone.
 #
-# What this repository produces, declared once, so that a consumer cannot be taught a different set of
-# artefacts from the one that is pushed.
+# What this repository produces, declared once for the steps that consume the artefacts rather than
+# build them. build-dockers.sh still names the image itself, because its build arguments differ from
+# what a consumer needs - so drift between the BUILD and this file remains possible and is not claimed
+# otherwise.
 #
 # Deliberately free of CI variables and of anything about HOW the artefacts are built - no build image,
 # no tag, no environment. Those belong to whatever drives the build and change when it does; this file
@@ -19,6 +21,16 @@
 # this file. The image name is spelled out in full rather than composed from a prefix, because no
 # composition rule fits the estate: some repositories publish several images suffixed by service, and
 # others publish exactly one named after the repository itself.
+#
+# An associative array needs bash 4, and macOS ships 3.2 as /bin/bash. It stays associative anyway,
+# because the estate's SBOM emitter reads ${!SERVICE_IMAGES[@]} as image NAMES - an indexed array would
+# silently yield 0, 1, 2 instead, and document an image called "0". So the shape is a contract. What is
+# fixed here is the diagnostic: say which bash is needed, rather than "declare: -A: invalid option".
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
+	echo "artefacts.sh needs bash 4 or newer for an associative array; this is ${BASH_VERSION:-not bash}. On macOS use a newer bash (brew install bash)." >&2
+	return 1 2>/dev/null || exit 1
+fi
+
 declare -A SERVICE_IMAGES
 SERVICE_IMAGES=( [linn/device-measurements-populator]=.. )
 
