@@ -20,6 +20,7 @@ LABEL org.label-schema.vendor="Linn Products Ltd." \
 
 RUN npm ci --omit=dev --quiet
 
-ENTRYPOINT [ "npm", "run-script" ]
-
-CMD [ "start" ]
+# node directly, never `npm start`: npm runs the script under `sh -c`, which leaves node a grandchild
+# of PID 1. The signal npm forwards on shutdown stops at that shell, so the drain never runs and every
+# in-flight request is severed.
+ENTRYPOINT [ "node", "./bin/www" ]

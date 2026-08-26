@@ -5,9 +5,17 @@
  * Module dependencies.
  */
 
+// The first act of the process, before the heavy requires below. Node running as PID 1 IGNORES
+// SIGTERM while nothing is listening for it, so a stop racing startup would be discarded outright and
+// the task would serve on until ECS killed it.
+var gracefulShutdown = require('@linn-cloud/graceful-shutdown');
+gracefulShutdown.holdSignalsUntilInstalled();
+
 var app = require('../app');
 var debug = require('debug')('CloudExaktPopulator:server');
 var http = require('http');
+var log = require('../logger');
+var shutdownConfig = require('../shutdownConfig');
 
 /**
  * Get port from environment and store in Express.
@@ -20,6 +28,14 @@ app.set('port', port);
  */
 
 var server = http.createServer(app);
+
+server.keepAliveTimeout = shutdownConfig.KEEP_ALIVE_TIMEOUT_MS;
+
+gracefulShutdown.install(server, {
+  drainTimeoutMs: shutdownConfig.DRAIN_TIMEOUT_MS,
+  exitFlushTimeoutMs: shutdownConfig.EXIT_FLUSH_TIMEOUT_MS,
+  log: log,
+});
 
 /**
  * Listen on provided port, on all network interfaces.
@@ -64,11 +80,13 @@ function onError(error) {
   switch (error.code) {
     case 'EACCES':
       console.error(bind + ' requires elevated privileges');
-      process.exit(1);
+      // Flushed rather than exited on directly: this is the message you need when a task will not
+      // start, and it goes to a pipe that process.exit() would discard.
+      gracefulShutdown.exitAfterFlushing(1, shutdownConfig.EXIT_FLUSH_TIMEOUT_MS);
       break;
     case 'EADDRINUSE':
       console.error(bind + ' is already in use');
-      process.exit(1);
+      gracefulShutdown.exitAfterFlushing(1, shutdownConfig.EXIT_FLUSH_TIMEOUT_MS);
       break;
     default:
       throw error;
