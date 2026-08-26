@@ -27,10 +27,12 @@ Parameters:
     Description: Name of the CloudFormation export holding this service's ALB target group ARN
   legacyAlbTargetGroupArn:
     Type: String
+    MinLength: 1
     AllowedPattern: '^none$|^arn:aws:elasticloadbalancing:[a-z0-9-]+:[0-9]{12}:targetgroup/[A-Za-z0-9-]{1,32}/[0-9a-f]{16}$'
     ConstraintDescription: >-
-      must be either the word none, or an elasticloadbalancing target-group ARN in the aws partition.
-      An empty value is deliberately not accepted - state none to mean it.
+      must be either the lowercase word none, or an elasticloadbalancing target-group ARN in the aws
+      partition. An empty value is rejected by MinLength rather than by the pattern, which
+      CloudFormation does not apply to an empty string - say none to mean it.
     Description: >-
       ARN of a second, pre-existing target group to register this service with alongside the one above,
       or the word none. Supplying an ARN lets a consumer be repointed from one load balancer to the other

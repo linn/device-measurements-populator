@@ -28,15 +28,15 @@
 # only the diagnostic - bash 3.2 otherwise reports "declare: -A: invalid option", which names the syntax
 # and not the requirement.
 #
-# Tested without array syntax, and covering the empty case, so that a POSIX shell reaches the message
-# instead of dying on the test: ${BASH_VERSINFO[0]} is itself a bashism.
-case "${BASH_VERSION:-}" in
-	''|[123].*)
-		echo "artefacts.sh needs bash 4 or newer for an associative array; this shell is ${BASH_VERSION:-not bash}. On macOS install a newer bash (brew install bash)." >&2
-		# shellcheck disable=SC2317  # reachable: this file is sourced, so `return` is valid and `exit` is the executed-directly fallback
-		return 1 2>/dev/null || exit 1
-		;;
-esac
+# Tested without array syntax, so that a POSIX shell reaches the message instead of dying on the test
+# itself - ${BASH_VERSINFO[0]} is a bashism, and matching on the version string would let a shell
+# reporting a bare "3" through. The second test asks for the capability rather than a version.
+if [ -z "${BASH_VERSION:-}" ] || ! declare -A _artefacts_probe 2>/dev/null; then
+	echo "artefacts.sh needs bash 4 or newer for an associative array; this shell is ${BASH_VERSION:-not bash}. On macOS install a newer bash (brew install bash)." >&2
+	# shellcheck disable=SC2317  # reachable: this file is sourced, so `return` is valid and `exit` is the executed-directly fallback
+	return 1 2>/dev/null || exit 1
+fi
+unset _artefacts_probe
 
 declare -A SERVICE_IMAGES
 SERVICE_IMAGES=( [linn/device-measurements-populator]=.. )
