@@ -28,6 +28,9 @@ Parameters:
   legacyAlbTargetGroupArn:
     Type: String
     AllowedPattern: '^none$|^arn:aws:elasticloadbalancing:[a-z0-9-]+:[0-9]{12}:targetgroup/[A-Za-z0-9-]{1,32}/[0-9a-f]{16}$'
+    ConstraintDescription: >-
+      must be either the word none, or an elasticloadbalancing target-group ARN in the aws partition.
+      An empty value is deliberately not accepted - state none to mean it.
     Description: >-
       ARN of a second, pre-existing target group to register this service with alongside the one above,
       or the word none. Supplying an ARN lets a consumer be repointed from one load balancer to the other

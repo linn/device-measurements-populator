@@ -19,7 +19,7 @@ before_script:
   # The AWS CLI is not on the noble image, and scripts/deploy.sh needs it.
   - pyenv install -s 3.10.13
   - pyenv local 3.10
-  - curl -fsSL --retry 3 "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip"
+  - curl -fsS --retry 3 --connect-timeout 15 --max-time 300 "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip"
   - unzip awscli-bundle.zip
   - ./awscli-bundle/install -b ~/bin/aws
 script:

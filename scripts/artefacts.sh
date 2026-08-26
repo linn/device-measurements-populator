@@ -22,14 +22,21 @@
 # composition rule fits the estate: some repositories publish several images suffixed by service, and
 # others publish exactly one named after the repository itself.
 #
-# An associative array needs bash 4, and macOS ships 3.2 as /bin/bash. It stays associative anyway,
-# because the estate's SBOM emitter reads ${!SERVICE_IMAGES[@]} as image NAMES - an indexed array would
-# silently yield 0, 1, 2 instead, and document an image called "0". So the shape is a contract. What is
-# fixed here is the diagnostic: say which bash is needed, rather than "declare: -A: invalid option".
-if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
-	echo "artefacts.sh needs bash 4 or newer for an associative array; this is ${BASH_VERSION:-not bash}. On macOS use a newer bash (brew install bash)." >&2
-	return 1 2>/dev/null || exit 1
-fi
+# An associative array needs bash 4, and macOS ships 3.2 as /bin/bash. It stays associative anyway: the
+# estate's SBOM emitter iterates ${!SERVICE_IMAGES[@]} for image NAMES, and on an indexed array that
+# yields subscripts, so the shape is part of a contract rather than a convenience. What is fixed here is
+# only the diagnostic - bash 3.2 otherwise reports "declare: -A: invalid option", which names the syntax
+# and not the requirement.
+#
+# Tested without array syntax, and covering the empty case, so that a POSIX shell reaches the message
+# instead of dying on the test: ${BASH_VERSINFO[0]} is itself a bashism.
+case "${BASH_VERSION:-}" in
+	''|[123].*)
+		echo "artefacts.sh needs bash 4 or newer for an associative array; this shell is ${BASH_VERSION:-not bash}. On macOS install a newer bash (brew install bash)." >&2
+		# shellcheck disable=SC2317  # reachable: this file is sourced, so `return` is valid and `exit` is the executed-directly fallback
+		return 1 2>/dev/null || exit 1
+		;;
+esac
 
 declare -A SERVICE_IMAGES
 SERVICE_IMAGES=( [linn/device-measurements-populator]=.. )
