@@ -117,7 +117,7 @@ Resources:
             - ''
             - - 'docker.io/linn/device-measurements-populator:'
               - !Ref 'dockerTag'
-          Memory: '100'
+          Memory: '512'
           PortMappings:
             - ContainerPort: 3000
           Environment:
