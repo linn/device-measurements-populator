@@ -141,7 +141,10 @@ Resources:
             - - 'docker.io/linn/device-measurements-populator:'
               - !Ref 'dockerTag'
           MemoryReservation: 200
-          Memory: 400
+          # 512, carried from master rather than this branch's 400. The hard limit was raised from 100
+          # on 2026-09-02 while this branch was open; taking the branch's lower number would quietly
+          # undo that, and a hard limit is not something to reduce as a side effect of a file move.
+          Memory: 512
           PortMappings:
             - ContainerPort: 3000
           LogConfiguration:
