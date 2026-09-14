@@ -152,10 +152,19 @@ Resources:
             Options:
               awslogs-group: !Sub '/ecs/${AWS::StackName}'
               awslogs-region: !Ref 'AWS::Region'
-              # The container must not stall on log delivery. A populator run is a long S3 and Dynamo
+              # Without this every stream is named after the container id, so a failed task ARN cannot
+              # be traced to the output that explains it.
+              awslogs-stream-prefix: populator
+              # The container must not stall on log delivery: a populator run is a long S3 and Dynamo
               # sweep, and blocking writes would make CloudWatch availability a dependency of the work
-              # itself rather than of observing it.
+              # rather than of observing it.
+              #
+              # The cost, stated because it is not free: when the buffer fills, lines are DROPPED, and
+              # the notice saying so is written to the Docker daemon log on the host - the unreachable
+              # place this change exists to escape. The buffer is raised well above the 1MB default to
+              # make that rare on a bursty sweep, not to make it impossible.
               mode: non-blocking
+              max-buffer-size: 8m
           Environment:
             - Name: AWS_REGION
               Value: !Ref 'AWS::Region'
@@ -173,14 +182,18 @@ Resources:
               Value: release
             - Name: PORT
               Value: '3000'
-  # Declared here rather than left to the awslogs driver, which creates a missing group on first write
-  # with NO retention - a group that then never expires. Eighteen of those were removed across the
-  # estate under linn/linn-api-development#641, and creating a nineteenth would undo that work. 30 days
-  # matches the retention that effort settled on.
+  # Declared, because the driver will not supply it: awslogs-create-group defaults to false, so a
+  # missing group does not get invented - the container fails to start with ResourceNotFoundException.
+  # Setting that option instead would create the group with NO retention, never expiring, which is the
+  # estate-wide problem linn/linn-api-development#641 removed from eighteen groups. 30 days is the
+  # retention that effort settled on.
   #
   # Named from the stack rather than an environment parameter: this template deliberately has no
-  # environment input - its only conditional keys on the target-group arrangement instead - and the
-  # stack name already carries the environment, so prod and sys cannot collide on one group.
+  # environment input - its only conditional keys on the target-group arrangement instead. That keeps
+  # sys distinct only as far as the stack name does: scripts/deploy.sh hardcodes
+  # deviceMeasurementPopulator-sys and refuses every other environment, and prod is deployed by hand
+  # (see issue #12), so prod's group name is whatever stack name the operator uses at cutover and is
+  # not recorded anywhere here.
   serviceLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -189,11 +202,13 @@ Resources:
 
   service:
     Type: AWS::ECS::Service
-    # Without this the service can start tasks before the group exists, and the awslogs driver creates
-    # a missing group ITSELF - with no retention - which is the state this change exists to prevent.
-    # The declared group would then fail to create because the driver's copy already holds the name.
-    # The sibling device-measurements-api omits this; its group predates the template, so the race
-    # cannot fire there and it is not evidence that the ordering is safe for a new group.
+    # Ordered against the group because the group is a precondition for a task starting at all: with
+    # awslogs-create-group left at its default, a driver that cannot find the group fails to
+    # initialise and the task does not run. On the taskDefinition this would order nothing - a task
+    # definition never runs anything - so it belongs here, on the resource that places tasks.
+    #
+    # The sibling device-measurements-api omits it and declares its group the same way; that is not
+    # evidence the ordering is safe, only that it has not yet lost the race.
     DependsOn: serviceLogGroup
     Properties:
       Cluster: !Ref 'targetCluster'

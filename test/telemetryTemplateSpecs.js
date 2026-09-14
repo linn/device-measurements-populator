@@ -8,44 +8,89 @@ var path = require('path');
 
 // What the deployed template must say about logging.
 //
-// Asserted on the template TEXT, not on a parse: nothing in this repo parses CloudFormation, and its
-// short tags (!Sub, !Ref) are not plain YAML. So these pin strings and cannot see structure - a
-// LogConfiguration attached to the wrong resource would still satisfy them. cfn-lint in CI is what
-// checks the shape.
+// These assertions read RESOURCE BLOCKS, not the file's text. The first version of this spec matched
+// regexes against the raw template and was worthless: every assertion passed with the whole
+// LogConfiguration commented out, because the rationale comments beside it contain the same words,
+// and `RetentionInDays: 3000` satisfied a `30` pattern that had no right-hand anchor. Both were
+// demonstrated before this was rewritten.
 //
-// The invariant worth pinning is the pair: the driver writes to the group NAMED in its options, and
-// only the group DECLARED as a resource carries retention. If the two names ever drift apart, the
-// driver silently creates its own group with no expiry - which is exactly the estate-wide problem
-// linn/linn-api-development#641 spent a week removing, and the reason this ticket exists.
+// Nothing in this repository parses CloudFormation and adding a YAML parser would be a new
+// dependency, so the reader below is deliberately small: it splits `Resources:` into its
+// two-space-indented children and strips comments. That is enough to say WHICH resource carries a
+// property, which is the thing the text version could not see. It still cannot evaluate !Sub or
+// validate the schema - and this repository runs no cfn-lint, so nothing else does either.
 //
 // PRECONDITION: none. Reads a file in the repo.
+
+var TEMPLATE = path.join(__dirname, '..', 'aws', 'deviceMeasurementsPopulatorCloudFormation.yaml');
+
+function stripComments(line) {
+    // Only whole-line and trailing comments; no value in this template contains a '#'.
+    return line.replace(/\s+#.*$/, '');
+}
+
+function resourceBlocks() {
+    var lines = fs.readFileSync(TEMPLATE, 'utf8').split('\n');
+    var start = lines.findIndex(function (l) { return /^Resources:\s*$/.test(l); });
+    expect(start, 'the template has no Resources section').to.be.greaterThan(-1);
+
+    var blocks = {};
+    var current = null;
+    for (var i = start + 1; i < lines.length; i++) {
+        var raw = lines[i];
+        if (/^\S/.test(raw) && raw.trim() !== '') { break; }          // next top-level section
+        if (/^\s*#/.test(raw) || raw.trim() === '') { continue; }     // comment or blank
+        var header = /^ {2}(\w+):\s*$/.exec(raw);
+        if (header) { current = header[1]; blocks[current] = []; continue; }
+        if (current) { blocks[current].push(stripComments(raw)); }
+    }
+    Object.keys(blocks).forEach(function (k) { blocks[k] = blocks[k].join('\n'); });
+    return blocks;
+}
+
+function valueOf(block, key) {
+    var m = new RegExp('^\\s*' + key + ':\\s*(.+?)\\s*$', 'm').exec(block || '');
+    return m ? m[1] : null;
+}
+
 describe('populator logging template', function () {
-    var template;
+    var blocks;
 
     before(function () {
-        template = fs.readFileSync(
-            path.join(__dirname, '..', 'aws', 'deviceMeasurementsPopulatorCloudFormation.yaml'),
-            'utf8'
-        );
+        blocks = resourceBlocks();
     });
 
-    it('sends container output to CloudWatch', function () {
-        expect(template).to.match(/LogDriver:\s*awslogs/);
+    it('sends the container output to CloudWatch', function () {
+        expect(blocks.taskDefinition, 'no taskDefinition resource').to.be.a('string');
+        expect(valueOf(blocks.taskDefinition, 'LogDriver')).to.equal('awslogs');
     });
 
-    it('writes to the group it declares, so the driver never creates an unexpiring one itself', function () {
-        var driverGroup = /awslogs-group:\s*(.+)/.exec(template);
-        var declaredGroup = /LogGroupName:\s*(.+)/.exec(template);
-        expect(driverGroup, 'no awslogs-group option').to.not.equal(null);
-        expect(declaredGroup, 'no LogGroupName declared').to.not.equal(null);
-        expect(driverGroup[1].trim()).to.equal(declaredGroup[1].trim());
+    it('writes to the group the template declares, not one the driver invents', function () {
+        var driverGroup = valueOf(blocks.taskDefinition, 'awslogs-group');
+        var declaredGroup = valueOf(blocks.serviceLogGroup, 'LogGroupName');
+        expect(driverGroup, 'the driver names no group').to.not.equal(null);
+        expect(declaredGroup, 'no group is declared').to.not.equal(null);
+        // Quoting is not semantics: compare the expression, not how it was written.
+        expect(driverGroup.replace(/['"]/g, '')).to.equal(declaredGroup.replace(/['"]/g, ''));
     });
 
-    it('expires the group, because a group without retention is kept forever', function () {
-        expect(template).to.match(/RetentionInDays:\s*30/);
+    it('never lets the driver create the group itself', function () {
+        // awslogs-create-group defaults to false, and must stay that way: a driver-created group is
+        // created with NO retention and never expires, which is the estate-wide problem that
+        // linn/linn-api-development#641 removed from eighteen groups.
+        expect(blocks.taskDefinition).to.not.match(/awslogs-create-group/);
     });
 
-    it('creates the group before the service can start writing to it', function () {
-        expect(template).to.match(/DependsOn:\s*serviceLogGroup/);
+    it('expires the group after exactly thirty days', function () {
+        expect(valueOf(blocks.serviceLogGroup, 'RetentionInDays')).to.equal('30');
+    });
+
+    it('makes the SERVICE wait for the group, since that is what starts tasks', function () {
+        // On the taskDefinition this would order nothing: a task definition never runs anything.
+        expect(valueOf(blocks.service, 'DependsOn')).to.equal('serviceLogGroup');
+    });
+
+    it('names the log streams after the service, so a stream can be traced to a task', function () {
+        expect(valueOf(blocks.taskDefinition, 'awslogs-stream-prefix')).to.not.equal(null);
     });
 });
