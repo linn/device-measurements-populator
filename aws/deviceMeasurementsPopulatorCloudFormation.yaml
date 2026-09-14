@@ -144,6 +144,15 @@ Resources:
           Memory: 400
           PortMappings:
             - ContainerPort: 3000
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub '/ecs/${AWS::StackName}'
+              awslogs-region: !Ref 'AWS::Region'
+              # The container must not stall on log delivery. A populator run is a long S3 and Dynamo
+              # sweep, and blocking writes would make CloudWatch availability a dependency of the work
+              # itself rather than of observing it.
+              mode: non-blocking
           Environment:
             - Name: AWS_REGION
               Value: !Ref 'AWS::Region'
@@ -161,8 +170,28 @@ Resources:
               Value: release
             - Name: PORT
               Value: '3000'
+  # Declared here rather than left to the awslogs driver, which creates a missing group on first write
+  # with NO retention - a group that then never expires. Eighteen of those were removed across the
+  # estate under linn/linn-api-development#641, and creating a nineteenth would undo that work. 30 days
+  # matches the retention that effort settled on.
+  #
+  # Named from the stack rather than an environment parameter: this template deliberately has no
+  # environment input - its only conditional keys on the target-group arrangement instead - and the
+  # stack name already carries the environment, so prod and sys cannot collide on one group.
+  serviceLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${AWS::StackName}'
+      RetentionInDays: 30
+
   service:
     Type: AWS::ECS::Service
+    # Without this the service can start tasks before the group exists, and the awslogs driver creates
+    # a missing group ITSELF - with no retention - which is the state this change exists to prevent.
+    # The declared group would then fail to create because the driver's copy already holds the name.
+    # The sibling device-measurements-api omits this; its group predates the template, so the race
+    # cannot fire there and it is not evidence that the ordering is safe for a new group.
+    DependsOn: serviceLogGroup
     Properties:
       Cluster: !Ref 'targetCluster'
       DesiredCount: '1'
