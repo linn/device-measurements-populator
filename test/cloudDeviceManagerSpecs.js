@@ -1,5 +1,4 @@
-"use strict";
-var chai = require("chai");
+var chai = require('chai');
 var sinon = require('sinon');
 var sinonChai = require('sinon-chai');
 /*jshint -W079 */
@@ -7,28 +6,54 @@ var expect = chai.expect;
 chai.use(sinonChai);
 var proxyquire = require('proxyquire');
 
-describe('Cloud Device Manager', function () {
-    var sut, loadDeviceCallbackArgs, saveDeviceCallbackArgs, deviceRepositoryStub, cloudFileDataRepositoryStub, saveFileCallbackArgs, loadFileCallbackArgs;
-    beforeEach(function () {
+describe('Cloud Device Manager', () => {
+    var sut,
+        loadDeviceCallbackArgs,
+        saveDeviceCallbackArgs,
+        deviceRepositoryStub,
+        cloudFileDataRepositoryStub,
+        saveFileCallbackArgs,
+        loadFileCallbackArgs;
+    beforeEach(() => {
         loadDeviceCallbackArgs = [];
         saveDeviceCallbackArgs = [];
 
         deviceRepositoryStub = {
-            filterByProductDescriptorId: sinon.spy(function loadCloudProductDescriptorByIdFromStub(productDescriptorId, callback) { callback.apply(null, loadDeviceCallbackArgs); }),
-            findBy: sinon.spy(function loadCloudDeviceFromStub(productDescriptorId, serialNumber, callback) { callback.apply(null, loadDeviceCallbackArgs); }),
-            addOrReplace: sinon.spy(function saveCloudDeviceToStub(cloudDevice, callback) { callback.apply(null, saveDeviceCallbackArgs); }),
-            removeBy: sinon.spy(function deleteCloudDeviceFromStub(productDescriptorId, serialNumber, callback) { callback.apply(); })
+            filterByProductDescriptorId: sinon.spy(
+                function loadCloudProductDescriptorByIdFromStub(productDescriptorId, callback) {
+                    callback.apply(null, loadDeviceCallbackArgs);
+                }
+            ),
+            findBy: sinon.spy(function loadCloudDeviceFromStub(productDescriptorId, serialNumber, callback) {
+                callback.apply(null, loadDeviceCallbackArgs);
+            }),
+            addOrReplace: sinon.spy(function saveCloudDeviceToStub(cloudDevice, callback) {
+                callback.apply(null, saveDeviceCallbackArgs);
+            }),
+            removeBy: sinon.spy(function deleteCloudDeviceFromStub(productDescriptorId, serialNumber, callback) {
+                callback.apply();
+            }),
         };
 
         saveFileCallbackArgs = [];
         loadFileCallbackArgs = [];
 
         cloudFileDataRepositoryStub = {
-            add: sinon.spy(function saveFileToStub(filename, data, callback) { callback.apply(null, saveFileCallbackArgs); }),
-            addOrReplace: sinon.spy(function saveFileByIdToStub(id, filename, data, callback) { callback.apply(null, saveFileCallbackArgs); }),
-            findBy: sinon.spy(function loadFileFromStub(id, callback) { callback.apply(null, loadFileCallbackArgs); }),
-            removeBy: sinon.spy(function deleteFileFromStub(id, callback) { callback.apply(); }),
-            generateUri: sinon.spy(function generateUriStub(key) { return "http://linn.cloud.filedata.debug.s3.amazonaws.com/" + key; })
+            add: sinon.spy(function saveFileToStub(filename, data, callback) {
+                callback.apply(null, saveFileCallbackArgs);
+            }),
+            addOrReplace: sinon.spy(function saveFileByIdToStub(id, filename, data, callback) {
+                callback.apply(null, saveFileCallbackArgs);
+            }),
+            findBy: sinon.spy(function loadFileFromStub(id, callback) {
+                callback.apply(null, loadFileCallbackArgs);
+            }),
+            removeBy: sinon.spy(function deleteFileFromStub(id, callback) {
+                callback.apply();
+            }),
+            generateUri: sinon.spy(function generateUriStub(key) {
+                return `http://linn.cloud.filedata.debug.s3.amazonaws.com/${key}`;
+            }),
         };
 
         // proxyquire replaces mockery, whose only published versions all carry a critical
@@ -41,86 +66,96 @@ describe('Cloud Device Manager', function () {
 
         sut = proxyquire('../cloudDeviceManager', {
             './repositories/cloudDeviceRepository': Object.assign(deviceRepositoryStub, { '@global': true }),
-            './repositories/fileDataRepository': Object.assign(cloudFileDataRepositoryStub, { '@global': true })
+            './repositories/fileDataRepository': Object.assign(cloudFileDataRepositoryStub, { '@global': true }),
         });
     });
-    describe('When adding malformed device', function () {
+    describe('When adding malformed device', () => {
         var productDescriptorId, serialNumber, data, result, resultError;
-        beforeEach(function (done) {
+        beforeEach((done) => {
             productDescriptorId = '25c1cf3c-7e53-490c-9020-62f580613ece';
             serialNumber = '12345';
             data = require('./data/updateMalformedCloudDeviceResource.json');
 
-            sut.add(productDescriptorId, serialNumber, data, function (err, data) {
+            sut.add(productDescriptorId, serialNumber, data, (err, data) => {
                 resultError = err;
                 result = data;
                 done();
             });
         });
-        it(' Should invoke callback with error', function () {
+        it(' Should invoke callback with error', () => {
             expect(resultError).to.exist;
             expect(result).to.be.undefined;
         });
     });
-    describe('When adding', function () {
+    describe('When adding', () => {
         var productDescriptorId, serialNumber, data, expectedData, result;
-        beforeEach(function (done) {
+        beforeEach((done) => {
             productDescriptorId = '25c1cf3c-7e53-490c-9020-62f580613ece';
             serialNumber = '12345';
             data = require('./data/updateCloudDeviceResource.json');
             expectedData = require('./data/cloudDeviceResource.json');
 
-            saveFileCallbackArgs[1] = {key: 'cd2b7e35-b5c2-4d23-b362-6a6f6cebc618', href:"http://linn.cloud.filedata.debug.s3.amazonaws.com/cd2b7e35-b5c2-4d23-b362-6a6f6cebc618"};
-            loadFileCallbackArgs[0] = Object.assign(new Error("NoSuchKey"), { name: "NoSuchKey" });
-            sut.add(productDescriptorId, serialNumber, data, function (err, data) {
+            saveFileCallbackArgs[1] = {
+                key: 'cd2b7e35-b5c2-4d23-b362-6a6f6cebc618',
+                href: 'http://linn.cloud.filedata.debug.s3.amazonaws.com/cd2b7e35-b5c2-4d23-b362-6a6f6cebc618',
+            };
+            loadFileCallbackArgs[0] = Object.assign(new Error('NoSuchKey'), { name: 'NoSuchKey' });
+            sut.add(productDescriptorId, serialNumber, data, (err, data) => {
                 result = data;
                 done();
             });
         });
-        it(' Should add file to S3', function () {
-            expect(cloudFileDataRepositoryStub.addOrReplace).to.have.been.calledWith("cd2b7e35-b5c2-4d23-b362-6a6f6cebc618", "1336161_UpperBass.tdms", new Buffer(data.components[0].measurements.impedance.file.files[0].data));
+        it(' Should add file to S3', () => {
+            expect(cloudFileDataRepositoryStub.addOrReplace).to.have.been.calledWith(
+                'cd2b7e35-b5c2-4d23-b362-6a6f6cebc618',
+                '1336161_UpperBass.tdms',
+                new Buffer(data.components[0].measurements.impedance.file.files[0].data)
+            );
         });
-        it(' Should not add without id', function () {
+        it(' Should not add without id', () => {
             expect(cloudFileDataRepositoryStub.add).not.to.have.been.called;
         });
-        it(' Should store result in DynamoDb', function () {
+        it(' Should store result in DynamoDb', () => {
             expect(deviceRepositoryStub.addOrReplace).to.have.been.calledWith(result);
         });
-        it(' Should invoke callback with correct json', function () {
+        it(' Should invoke callback with correct json', () => {
             expect(result).to.be.eql(expectedData);
         });
     });
-    describe('When adding file that is already there', function () {
+    describe('When adding file that is already there', () => {
         var productDescriptorId, serialNumber, data, expectedData, result;
-        beforeEach(function (done) {
+        beforeEach((done) => {
             productDescriptorId = '25c1cf3c-7e53-490c-9020-62f580613ece';
             serialNumber = '12345';
             data = require('./data/updateCloudDeviceResource.json');
             expectedData = require('./data/cloudDeviceResource.json');
 
-            saveFileCallbackArgs[1] = {key: '5b61b280-bb73-11e4-ba72-9dec41bc3eb3', href:"http://linn.cloud.filedata.debug.s3.amazonaws.com/5b61b280-bb73-11e4-ba72-9dec41bc3eb3"};
-            loadFileCallbackArgs[1] = {filename : "1336161_UpperBass.tdms"};
-            sut.add(productDescriptorId, serialNumber, data, function (err, data) {
+            saveFileCallbackArgs[1] = {
+                key: '5b61b280-bb73-11e4-ba72-9dec41bc3eb3',
+                href: 'http://linn.cloud.filedata.debug.s3.amazonaws.com/5b61b280-bb73-11e4-ba72-9dec41bc3eb3',
+            };
+            loadFileCallbackArgs[1] = { filename: '1336161_UpperBass.tdms' };
+            sut.add(productDescriptorId, serialNumber, data, (err, data) => {
                 result = data;
                 done();
             });
         });
-        it(' Should not add file to S3', function () {
+        it(' Should not add file to S3', () => {
             expect(cloudFileDataRepositoryStub.addOrReplace).not.to.have.been.called;
         });
-        it(' Should not add without id', function () {
+        it(' Should not add without id', () => {
             expect(cloudFileDataRepositoryStub.add).not.to.have.been.called;
         });
-        it(' Should store result in DynamoDb', function () {
+        it(' Should store result in DynamoDb', () => {
             expect(deviceRepositoryStub.addOrReplace).to.have.been.calledWith(result);
         });
-        it(' Should invoke callback with correct json', function () {
+        it(' Should invoke callback with correct json', () => {
             expect(result).to.be.eql(expectedData);
         });
     });
-    describe('When replacing existing cloud device', function () {
+    describe('When replacing existing cloud device', () => {
         var productDescriptorId, serialNumber, data, expectedData, existingData, result;
-        beforeEach(function (done) {
+        beforeEach((done) => {
             productDescriptorId = '25c1cf3c-7e53-490c-9020-62f580613ece';
             serialNumber = '12345';
             data = require('./data/updateCloudDeviceResource.json');
@@ -128,36 +163,43 @@ describe('Cloud Device Manager', function () {
             expectedData = require('./data/cloudDeviceResource.json');
 
             loadDeviceCallbackArgs[1] = existingData;
-            loadFileCallbackArgs[0] = Object.assign(new Error("NoSuchKey"), { name: "NoSuchKey" });
-            saveFileCallbackArgs[1] = {key: 'cd2b7e35-b5c2-4d23-b362-6a6f6cebc618', href:"http://linn.cloud.filedata.debug.s3.amazonaws.com/cd2b7e35-b5c2-4d23-b362-6a6f6cebc618"};
+            loadFileCallbackArgs[0] = Object.assign(new Error('NoSuchKey'), { name: 'NoSuchKey' });
+            saveFileCallbackArgs[1] = {
+                key: 'cd2b7e35-b5c2-4d23-b362-6a6f6cebc618',
+                href: 'http://linn.cloud.filedata.debug.s3.amazonaws.com/cd2b7e35-b5c2-4d23-b362-6a6f6cebc618',
+            };
 
-            sut.add(productDescriptorId, serialNumber, data, function (err, data) {
+            sut.add(productDescriptorId, serialNumber, data, (err, data) => {
                 result = data;
                 done();
             });
         });
-        it(' Should not delete s3 data', function () {
+        it(' Should not delete s3 data', () => {
             expect(cloudFileDataRepositoryStub.removeBy).not.to.have.been.called;
         });
-        it(' Should remove device from repository', function () {
+        it(' Should remove device from repository', () => {
             expect(deviceRepositoryStub.removeBy).to.have.been.calledWith(productDescriptorId, serialNumber);
         });
-        it(' Should add file to S3', function () {
-            expect(cloudFileDataRepositoryStub.addOrReplace).to.have.been.calledWith("cd2b7e35-b5c2-4d23-b362-6a6f6cebc618", "1336161_UpperBass.tdms", new Buffer(data.components[0].measurements.impedance.file.files[0].data));
+        it(' Should add file to S3', () => {
+            expect(cloudFileDataRepositoryStub.addOrReplace).to.have.been.calledWith(
+                'cd2b7e35-b5c2-4d23-b362-6a6f6cebc618',
+                '1336161_UpperBass.tdms',
+                new Buffer(data.components[0].measurements.impedance.file.files[0].data)
+            );
         });
-        it(' Should not add without id', function () {
+        it(' Should not add without id', () => {
             expect(cloudFileDataRepositoryStub.add).not.to.have.been.called;
         });
-        it(' Should store result in DynamoDb', function () {
+        it(' Should store result in DynamoDb', () => {
             expect(deviceRepositoryStub.addOrReplace).to.have.been.calledWith(result);
         });
-        it(' Should invoke callback with correct json', function () {
+        it(' Should invoke callback with correct json', () => {
             expect(result).to.be.eql(expectedData);
         });
     });
-    describe('When removing', function () {
+    describe('When removing', () => {
         var productDescriptorId, serialNumber, data;
-        beforeEach(function (done) {
+        beforeEach((done) => {
             productDescriptorId = '25c1cf3c-7e53-490c-9020-62f580613ece';
             serialNumber = '12345';
             data = require('./data/cloudDeviceResource.json');
@@ -166,28 +208,28 @@ describe('Cloud Device Manager', function () {
 
             sut.remove(productDescriptorId, serialNumber, done);
         });
-        it(' Should retrieve device from repository', function () {
+        it(' Should retrieve device from repository', () => {
             expect(deviceRepositoryStub.findBy).to.have.been.calledWith(productDescriptorId, serialNumber);
         });
-        it(' Should not delete s3 data', function () {
+        it(' Should not delete s3 data', () => {
             expect(cloudFileDataRepositoryStub.removeBy).not.to.have.been.called;
         });
-        it(' Should remove device from repository', function () {
+        it(' Should remove device from repository', () => {
             expect(deviceRepositoryStub.removeBy).to.have.been.calledWith(productDescriptorId, serialNumber);
         });
     });
-    describe('When removing device that does not exist', function () {
+    describe('When removing device that does not exist', () => {
         var productDescriptorId, serialNumber;
-        beforeEach(function (done) {
+        beforeEach((done) => {
             productDescriptorId = '25c1cf3c-7e53-490c-9020-62f580613ece';
             serialNumber = '12345';
 
             sut.remove(productDescriptorId, serialNumber, done);
         });
-        it(' Should retrieve device from repository', function () {
+        it(' Should retrieve device from repository', () => {
             expect(deviceRepositoryStub.findBy).to.have.been.calledWith(productDescriptorId, serialNumber);
         });
-        it(' Should not remove device from repository', function () {
+        it(' Should not remove device from repository', () => {
             expect(deviceRepositoryStub.removeBy).not.to.have.been.called;
         });
     });

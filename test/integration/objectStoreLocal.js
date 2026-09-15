@@ -1,5 +1,3 @@
-"use strict";
-
 // Runtime precondition: docker must be running and able to pull the emulator image below. Travis
 // already declares docker as a service for this repository.
 //
@@ -10,9 +8,9 @@
 //
 // As with the DynamoDB harness, this fails loudly rather than skipping when docker is absent.
 
-const { execFileSync } = require("child_process");
-const net = require("net");
-const { S3Client, CreateBucketCommand, ListBucketsCommand } = require("@aws-sdk/client-s3");
+const { execFileSync } = require('node:child_process');
+const net = require('node:net');
+const { S3Client, CreateBucketCommand, ListBucketsCommand } = require('@aws-sdk/client-s3');
 
 // MiniStack rather than minio, and the reason is not preference: `minio/minio` stopped being pullable
 // from Docker Hub for us entirely. Measured 2026-09-14 - an anonymous pull token gets 401 for the
@@ -33,8 +31,8 @@ const { S3Client, CreateBucketCommand, ListBucketsCommand } = require("@aws-sdk/
 //
 // Pinned by digest, not by tag. An untagged image is :latest, so these round trips would be validating
 // against whatever the registry served that day.
-const IMAGE = "ministackorg/ministack@sha256:cd4ac9bc91f7954b476dcdfdd46e3c5750c599f525660e4a42f6769e687e6af0";
-const ENV_KEYS = ["AWS_ENDPOINT_URL_S3", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"];
+const IMAGE = 'ministackorg/ministack@sha256:cd4ac9bc91f7954b476dcdfdd46e3c5750c599f525660e4a42f6769e687e6af0';
+const ENV_KEYS = ['AWS_ENDPOINT_URL_S3', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'];
 
 function freePort() {
     const server = net.createServer();
@@ -46,18 +44,21 @@ function freePort() {
 
 function docker(args) {
     // execFileSync blocks the event loop, so mocha's own timeout cannot fire while it runs.
-    return execFileSync("docker", args, {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
+    return execFileSync('docker', args, {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
         timeout: 180000,
-        killSignal: "SIGKILL",
+        killSignal: 'SIGKILL',
     }).trim();
 }
 
 function restore(saved) {
-    ENV_KEYS.forEach(function (name) {
-        if (saved[name] === undefined) { delete process.env[name]; }
-        else { process.env[name] = saved[name]; }
+    ENV_KEYS.forEach((name) => {
+        if (saved[name] === undefined) {
+            delete process.env[name];
+        } else {
+            process.env[name] = saved[name];
+        }
     });
 }
 
@@ -69,7 +70,7 @@ async function waitUntilAnswering(client, deadlineMs) {
             return;
         } catch (err) {
             if (Date.now() > giveUpAt) {
-                throw new Error("the object store did not answer within " + deadlineMs + "ms: " + err.message);
+                throw new Error(`the object store did not answer within ${deadlineMs}ms: ${err.message}`);
             }
             await new Promise((resolve) => setTimeout(resolve, 200));
         }
@@ -82,24 +83,28 @@ module.exports = {
         // Saved and restored rather than overwritten: a developer or CI agent with real credentials
         // exported would otherwise run every later spec as localkey/localsecret against real AWS.
         const saved = {};
-        ENV_KEYS.forEach(function (name) { saved[name] = process.env[name]; });
+        ENV_KEYS.forEach((name) => {
+            saved[name] = process.env[name];
+        });
 
         // 4566 is the emulator's single AWS-facing port, and it needs no root credentials of its own -
         // it accepts any SigV4 signature, so the keys set below are only what the SDK requires to sign.
-        const containerId = docker([
-            "run", "-d", "--rm", "-p", "127.0.0.1:" + port + ":4566", IMAGE,
-        ]);
+        const containerId = docker(['run', '-d', '--rm', '-p', `127.0.0.1:${port}:4566`, IMAGE]);
 
-        const reap = function () {
-            try { docker(["rm", "-f", containerId]); } catch (ignored) { /* already gone */ }
+        const reap = () => {
+            try {
+                docker(['rm', '-f', containerId]);
+            } catch (_ignored) {
+                /* already gone */
+            }
         };
-        process.once("exit", reap);
+        process.once('exit', reap);
 
-        process.env.AWS_ENDPOINT_URL_S3 = "http://127.0.0.1:" + port;
-        process.env.AWS_ACCESS_KEY_ID = "localkey";
-        process.env.AWS_SECRET_ACCESS_KEY = "localsecret";
+        process.env.AWS_ENDPOINT_URL_S3 = `http://127.0.0.1:${port}`;
+        process.env.AWS_ACCESS_KEY_ID = 'localkey';
+        process.env.AWS_SECRET_ACCESS_KEY = 'localsecret';
 
-        const admin = new S3Client({ region: "eu-west-1" });
+        const admin = new S3Client({ region: 'eu-west-1' });
 
         try {
             await waitUntilAnswering(admin, 60000);
@@ -107,7 +112,7 @@ module.exports = {
                 await admin.send(new CreateBucketCommand({ Bucket: bucket }));
             }
         } catch (err) {
-            process.removeListener("exit", reap);
+            process.removeListener('exit', reap);
             reap();
             restore(saved);
             throw err;
@@ -116,8 +121,12 @@ module.exports = {
         return {
             port: port,
             stop: function stopObjectStore() {
-                process.removeListener("exit", reap);
-                try { reap(); } finally { restore(saved); }
+                process.removeListener('exit', reap);
+                try {
+                    reap();
+                } finally {
+                    restore(saved);
+                }
             },
         };
     },

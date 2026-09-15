@@ -1,5 +1,4 @@
-"use strict";
-var chai = require("chai");
+var chai = require('chai');
 var sinon = require('sinon');
 var sinonChai = require('sinon-chai');
 var proxyquire = require('proxyquire');
@@ -16,7 +15,7 @@ Object.assign(process.env, {
     PRODUCT_DESCRIPTORS_TABLE_INDEX: 'descriptors-index',
     EXPIRE_S3_OBJECTS_TABLE_NAME: 'expiries',
     DEVICE_FILE_DATA_BUCKET: 'file-data',
-    NODE_ENV: 'test'
+    NODE_ENV: 'test',
 });
 /*jshint -W079 */
 var expect = chai.expect;
@@ -24,17 +23,19 @@ chai.use(sinonChai);
 
 function generateResponseStub(done) {
     return {
-        json: sinon.spy(function () { return this; }),
-        status: function(statusCode) {
+        json: sinon.spy(function () {
+            return this;
+        }),
+        status: function (statusCode) {
             this.statusCode = statusCode;
             done();
         },
         send: sinon.spy(),
-        sendStatus: function(statusCode) {
+        sendStatus: function (statusCode) {
             this.statusCode = statusCode;
             done();
         },
-        set: sinon.spy()
+        set: sinon.spy(),
     };
 }
 
@@ -44,35 +45,61 @@ function generateRequestStub(acceptHeader, parameters, body) {
             return this.headers.accept;
         },
         headers: {
-            accept: acceptHeader
+            accept: acceptHeader,
         },
         params: parameters,
-        body: body
+        body: body,
     };
 }
 
-describe('Exakt Populator Api', function () {
-    var sut, loadProductDescriptorCallbackArgs, saveProductDescriptorCallbackArgs, productDescriptorRepositoryStub, loadDeviceCallbackArgs, saveDeviceCallbackArgs, deviceRepositoryStub, cloudFileDataRepositoryStub, saveFileCallbackArgs, loadFileCallbackArgs;
-    beforeEach(function () {
-
+describe('Exakt Populator Api', () => {
+    var sut,
+        loadProductDescriptorCallbackArgs,
+        saveProductDescriptorCallbackArgs,
+        productDescriptorRepositoryStub,
+        loadDeviceCallbackArgs,
+        saveDeviceCallbackArgs,
+        deviceRepositoryStub,
+        cloudFileDataRepositoryStub,
+        saveFileCallbackArgs,
+        loadFileCallbackArgs;
+    beforeEach(() => {
         loadProductDescriptorCallbackArgs = [];
         saveProductDescriptorCallbackArgs = [];
 
         productDescriptorRepositoryStub = {
-            findBy: sinon.spy(function loadCloudProductDescriptorByIdFromStub(productDescriptorId, callback) { callback.apply(null, loadProductDescriptorCallbackArgs); }),
-            filterBy: sinon.spy(function loadCloudProductDescriptorFromStub(vendor, productType, callback) { callback.apply(null, loadProductDescriptorCallbackArgs); }),
-            addOrReplace: sinon.spy(function saveCloudProductDescriptorToStub(cloudProductDescriptor, callback) { callback.apply(null, saveProductDescriptorCallbackArgs); }),
-            removeBy: sinon.spy(function deleteFileFromStub(id, callback) { callback.apply(); })
+            findBy: sinon.spy(function loadCloudProductDescriptorByIdFromStub(productDescriptorId, callback) {
+                callback.apply(null, loadProductDescriptorCallbackArgs);
+            }),
+            filterBy: sinon.spy(function loadCloudProductDescriptorFromStub(vendor, productType, callback) {
+                callback.apply(null, loadProductDescriptorCallbackArgs);
+            }),
+            addOrReplace: sinon.spy(function saveCloudProductDescriptorToStub(cloudProductDescriptor, callback) {
+                callback.apply(null, saveProductDescriptorCallbackArgs);
+            }),
+            removeBy: sinon.spy(function deleteFileFromStub(id, callback) {
+                callback.apply();
+            }),
         };
 
         loadDeviceCallbackArgs = [];
         saveDeviceCallbackArgs = [];
 
         deviceRepositoryStub = {
-            filterByProductDescriptorId: sinon.spy(function loadCloudProductDescriptorByIdFromStub(productDescriptorId, callback) { callback.apply(null, loadDeviceCallbackArgs); }),
-            findBy: sinon.spy(function loadCloudDeviceFromStub(productDescriptorId, serialNumber, callback) { callback.apply(null, loadDeviceCallbackArgs); }),
-            addOrReplace: sinon.spy(function saveCloudDeviceToStub(cloudDevice, callback) { callback.apply(null, saveDeviceCallbackArgs); }),
-            removeBy: sinon.spy(function deleteCloudDeviceFromStub(productDescriptorId, serialNumber, callback) { callback.apply(); })
+            filterByProductDescriptorId: sinon.spy(
+                function loadCloudProductDescriptorByIdFromStub(productDescriptorId, callback) {
+                    callback.apply(null, loadDeviceCallbackArgs);
+                }
+            ),
+            findBy: sinon.spy(function loadCloudDeviceFromStub(productDescriptorId, serialNumber, callback) {
+                callback.apply(null, loadDeviceCallbackArgs);
+            }),
+            addOrReplace: sinon.spy(function saveCloudDeviceToStub(cloudDevice, callback) {
+                callback.apply(null, saveDeviceCallbackArgs);
+            }),
+            removeBy: sinon.spy(function deleteCloudDeviceFromStub(productDescriptorId, serialNumber, callback) {
+                callback.apply();
+            }),
         };
 
         saveFileCallbackArgs = [];
@@ -83,11 +110,21 @@ describe('Exakt Populator Api', function () {
         // real repository nor anything that calls it, so the first test to reach one would have
         // thrown rather than asserted.
         cloudFileDataRepositoryStub = {
-            generateUri: sinon.spy(function generateUriStub(key) { return '/file-data/' + key; }),
-            add: sinon.spy(function saveFileToStub(filename, data, callback) { callback.apply(null, saveFileCallbackArgs); }),
-            addOrReplace: sinon.spy(function saveFileByIdToStub(id, filename, data, callback) { callback.apply(null, saveFileCallbackArgs); }),
-            findBy: sinon.spy(function loadFileFromStub(id, callback) { callback.apply(null, loadFileCallbackArgs); }),
-            removeBy: sinon.spy(function deleteFileFromStub(id, callback) { callback.apply(); })
+            generateUri: sinon.spy(function generateUriStub(key) {
+                return `/file-data/${key}`;
+            }),
+            add: sinon.spy(function saveFileToStub(filename, data, callback) {
+                callback.apply(null, saveFileCallbackArgs);
+            }),
+            addOrReplace: sinon.spy(function saveFileByIdToStub(id, filename, data, callback) {
+                callback.apply(null, saveFileCallbackArgs);
+            }),
+            findBy: sinon.spy(function loadFileFromStub(id, callback) {
+                callback.apply(null, loadFileCallbackArgs);
+            }),
+            removeBy: sinon.spy(function deleteFileFromStub(id, callback) {
+                callback.apply();
+            }),
         };
 
         // proxyquire replaces mockery, whose only published versions all carry a critical
@@ -106,17 +143,19 @@ describe('Exakt Populator Api', function () {
 
         sut = proxyquire('../../routes/exaktPopulatorApi', {
             '../repositories/cloudDeviceRepository': Object.assign(deviceRepositoryStub, { '@global': true }),
-            '../repositories/cloudProductDescriptorRepository': Object.assign(productDescriptorRepositoryStub, { '@global': true }),
-            '../repositories/fileDataRepository': Object.assign(cloudFileDataRepositoryStub, { '@global': true })
+            '../repositories/cloudProductDescriptorRepository': Object.assign(productDescriptorRepositoryStub, {
+                '@global': true,
+            }),
+            '../repositories/fileDataRepository': Object.assign(cloudFileDataRepositoryStub, { '@global': true }),
         });
     });
     // The case that makes the stubbing load-bearing. Every other describe in this file is a
     // validation rejection that returns before reaching a repository, so its assertions are all
     // 'was not called' and would pass just as well against the real modules - which is exactly what
     // was happening while the stub keys resolved to a path nothing requires.
-    describe('When adding a valid cloud device', function () {
+    describe('When adding a valid cloud device', () => {
         var next, res, req, resource;
-        beforeEach(function (done) {
+        beforeEach((done) => {
             resource = JSON.parse(JSON.stringify(require('../data/updateCloudDeviceResource.json')));
             loadDeviceCallbackArgs = [];
             loadFileCallbackArgs = [Object.assign(new Error('NoSuchKey'), { name: 'NoSuchKey' })];
@@ -127,141 +166,150 @@ describe('Exakt Populator Api', function () {
                 'application/json',
                 {
                     productDescriptorId: '25c1cf3c-7e53-490c-9020-62f580613ece',
-                    serialNumber: '12345'
+                    serialNumber: '12345',
                 },
                 resource
             );
             res = generateResponseStub(done);
-            next = function (error) { res.statusCode = error.status; done(); };
+            next = (error) => {
+                res.statusCode = error.status;
+                done();
+            };
 
             sut.addDevice(req, res, next);
         });
-        it('Should store the device through the repository', function () {
+        it('Should store the device through the repository', () => {
             expect(deviceRepositoryStub.addOrReplace).to.have.been.called;
         });
-        it('Should store the device under the serial number from the URI', function () {
+        it('Should store the device under the serial number from the URI', () => {
             expect(deviceRepositoryStub.addOrReplace.getCall(0).args[0]).to.include({
                 productDescriptorId: '25c1cf3c-7e53-490c-9020-62f580613ece',
-                serialNumber: '12345'
+                serialNumber: '12345',
             });
         });
-        it('Should put the measurement file in S3', function () {
+        it('Should put the measurement file in S3', () => {
             expect(cloudFileDataRepositoryStub.addOrReplace).to.have.been.called;
         });
-        it('Should answer 200', function () {
+        it('Should answer 200', () => {
             expect(res.statusCode).to.eql(200);
         });
     });
 
-    describe('When adding a cloud device and serial number does not match URI', function () {
+    describe('When adding a cloud device and serial number does not match URI', () => {
         var next, res, req;
-        beforeEach(function (done) {
+        beforeEach((done) => {
             req = generateRequestStub(
                 'application/json',
                 {
                     productDescriptorId: '25c1cf3c-7e53-490c-9020-62f580613ece',
-                    serialNumber: 'X2345'
+                    serialNumber: 'X2345',
                 },
                 {
-                    serialNumber: "12345",
+                    serialNumber: '12345',
                     links: [
-                        { rel: 'product-descriptor', href: '/product-descriptors/25c1cf3c-7e53-490c-9020-62f580613ece' }
-                    ]
+                        {
+                            rel: 'product-descriptor',
+                            href: '/product-descriptors/25c1cf3c-7e53-490c-9020-62f580613ece',
+                        },
+                    ],
                 },
                 {}
             );
             res = generateResponseStub(done);
-            next = function(error) {
+            next = (error) => {
                 res.statusCode = error.status;
                 done();
             };
 
             sut.addDevice(req, res, next);
         });
-        it('Should return bad request', function () {
+        it('Should return bad request', () => {
             expect(res.statusCode).to.eql(400);
         });
-        it('Should never do anything with devicerepository', function () {
+        it('Should never do anything with devicerepository', () => {
             expect(deviceRepositoryStub.filterByProductDescriptorId).not.to.have.been.called;
             expect(deviceRepositoryStub.findBy).not.to.have.been.called;
             expect(deviceRepositoryStub.addOrReplace).not.to.have.been.called;
             expect(deviceRepositoryStub.removeBy).not.to.have.been.called;
         });
-        it('Should never change anything in S3', function () {
+        it('Should never change anything in S3', () => {
             expect(cloudFileDataRepositoryStub.add).not.to.have.been.called;
             expect(cloudFileDataRepositoryStub.addOrReplace).not.to.have.been.called;
             expect(cloudFileDataRepositoryStub.findBy).not.to.have.been.called;
             expect(cloudFileDataRepositoryStub.removeBy).not.to.have.been.called;
         });
     });
-    describe('When adding a cloud device and guid does not match URI', function () {
+    describe('When adding a cloud device and guid does not match URI', () => {
         var next, res, req;
-        beforeEach(function (done) {
+        beforeEach((done) => {
             req = generateRequestStub(
                 'application/json',
                 {
                     productDescriptorId: 'X5c1cf3c-7e53-490c-9020-62f580613ece',
-                    serialNumber: '12345'
+                    serialNumber: '12345',
                 },
                 {
-                    serialNumber: "12345",
+                    serialNumber: '12345',
                     links: [
-                        { rel: 'product-descriptor', href: '/product-descriptors/25c1cf3c-7e53-490c-9020-62f580613ece' }
-                    ]
+                        {
+                            rel: 'product-descriptor',
+                            href: '/product-descriptors/25c1cf3c-7e53-490c-9020-62f580613ece',
+                        },
+                    ],
                 }
             );
             res = generateResponseStub(done);
-            next = function(error) {
+            next = (error) => {
                 res.statusCode = error.status;
                 done();
             };
 
             sut.addDevice(req, res, next);
         });
-        it('Should return bad request', function () {
+        it('Should return bad request', () => {
             expect(res.statusCode).to.eql(400);
         });
-        it('Should never do anything with devicerepository', function () {
+        it('Should never do anything with devicerepository', () => {
             expect(deviceRepositoryStub.filterByProductDescriptorId).not.to.have.been.called;
             expect(deviceRepositoryStub.findBy).not.to.have.been.called;
             expect(deviceRepositoryStub.addOrReplace).not.to.have.been.called;
             expect(deviceRepositoryStub.removeBy).not.to.have.been.called;
         });
-        it('Should never change anything in S3', function () {
+        it('Should never change anything in S3', () => {
             expect(cloudFileDataRepositoryStub.add).not.to.have.been.called;
             expect(cloudFileDataRepositoryStub.addOrReplace).not.to.have.been.called;
             expect(cloudFileDataRepositoryStub.findBy).not.to.have.been.called;
             expect(cloudFileDataRepositoryStub.removeBy).not.to.have.been.called;
         });
     });
-    describe('When adding a cloud product descriptor and guid does not match URI', function () {
+    describe('When adding a cloud product descriptor and guid does not match URI', () => {
         var next, res, req;
-        beforeEach(function (done) {
+        beforeEach((done) => {
             req = generateRequestStub(
                 'application/json',
                 {
-                    productDescriptorId: 'sdfsdf'
+                    productDescriptorId: 'sdfsdf',
                 },
                 {}
             );
             res = generateResponseStub(done);
-            next = function(error) {
+            next = (error) => {
                 res.statusCode = error.status;
                 done();
             };
 
             sut.addProductDescriptor(req, res, next);
         });
-        it('Should return bad request', function () {
+        it('Should return bad request', () => {
             expect(res.statusCode).to.eql(400);
         });
-        it('Should never do anything with devicerepository', function () {
+        it('Should never do anything with devicerepository', () => {
             expect(productDescriptorRepositoryStub.findBy).not.to.have.been.called;
             expect(productDescriptorRepositoryStub.filterBy).not.to.have.been.called;
             expect(productDescriptorRepositoryStub.addOrReplace).not.to.have.been.called;
             expect(productDescriptorRepositoryStub.removeBy).not.to.have.been.called;
         });
-        it('Should never change anything in S3', function () {
+        it('Should never change anything in S3', () => {
             expect(cloudFileDataRepositoryStub.add).not.to.have.been.called;
             expect(cloudFileDataRepositoryStub.addOrReplace).not.to.have.been.called;
             expect(cloudFileDataRepositoryStub.findBy).not.to.have.been.called;

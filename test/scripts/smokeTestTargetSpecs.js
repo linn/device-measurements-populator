@@ -1,12 +1,11 @@
-"use strict";
-var chai = require("chai");
+var chai = require('chai');
 /*jshint -W079 */
 var expect = chai.expect;
 
-var fs = require('fs');
-var os = require('os');
-var path = require('path');
-var execFileSync = require('child_process').execFileSync;
+var fs = require('node:fs');
+var os = require('node:os');
+var path = require('node:path');
+var execFileSync = require('node:child_process').execFileSync;
 
 // Which addresses a --target resolves to, asserted through the real scripts/smoke-test.sh rather than
 // by reading its table.
@@ -16,10 +15,10 @@ var execFileSync = require('child_process').execFileSync;
 // the read-back - rather than from a probe, because there is no longer a probe to read them from.
 //
 // PRECONDITION: bash and node on PATH. No network, no AWS.
-describe('smoke-test target resolution', function () {
+describe('smoke-test target resolution', () => {
     var workDir, calls;
 
-    beforeEach(function () {
+    beforeEach(() => {
         workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smoke-target-'));
         fs.mkdirSync(path.join(workDir, 'scripts'));
         fs.mkdirSync(path.join(workDir, 'bin'));
@@ -33,22 +32,25 @@ describe('smoke-test target resolution', function () {
         // sequence instead of stopping at the first request. Only URLs are recorded: a payload contains
         // newlines and would corrupt a line-per-call log.
         var stub = path.join(workDir, 'bin', 'curl');
-        fs.writeFileSync(stub, [
-            '#!/bin/bash',
-            'out=; prev=',
-            'for a in "$@"; do',
-            '  case "$a" in http://*|https://*) printf "%s\\n" "$a" >> "' + calls + '" ;; esac',
-            '  [ "$prev" = "-o" ] && out="$a"',
-            '  prev="$a"',
-            'done',
-            '[ -n "$out" ] && printf "{}" > "$out"',
-            'printf "%s" "${STUB_STATUS:-200}"',
-            ''
-        ].join('\n'));
+        fs.writeFileSync(
+            stub,
+            [
+                '#!/bin/bash',
+                'out=; prev=',
+                'for a in "$@"; do',
+                `  case "$a" in http://*|https://*) printf "%s\\n" "$a" >> "${calls}" ;; esac`,
+                '  [ "$prev" = "-o" ] && out="$a"',
+                '  prev="$a"',
+                'done',
+                '[ -n "$out" ] && printf "{}" > "$out"',
+                'printf "%s" "${STUB_STATUS:-200}"',
+                '',
+            ].join('\n')
+        );
         fs.chmodSync(stub, 0o755);
     });
 
-    afterEach(function () {
+    afterEach(() => {
         fs.rmSync(workDir, { recursive: true, force: true });
     });
 
@@ -61,11 +63,16 @@ describe('smoke-test target resolution', function () {
         try {
             execFileSync('bash', ['scripts/smoke-test.sh'].concat(args), {
                 cwd: workDir,
-                env: Object.assign({}, process.env, {
-                    PATH: path.join(workDir, 'bin') + path.delimiter + process.env.PATH
-                }, stubEnv || {}),
+                env: Object.assign(
+                    {},
+                    process.env,
+                    {
+                        PATH: path.join(workDir, 'bin') + path.delimiter + process.env.PATH,
+                    },
+                    stubEnv || {}
+                ),
                 stdio: 'pipe',
-                encoding: 'utf8'
+                encoding: 'utf8',
             });
         } catch (err) {
             status = err.status;
@@ -76,9 +83,7 @@ describe('smoke-test target resolution', function () {
             status: status,
             stderr: stderr,
             stdout: stdout,
-            requested: fs.existsSync(calls)
-                ? fs.readFileSync(calls, 'utf8').trim().split('\n').filter(Boolean)
-                : []
+            requested: fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8').trim().split('\n').filter(Boolean) : [],
         };
     }
 
@@ -86,38 +91,46 @@ describe('smoke-test target resolution', function () {
     // so a populator address and a measurements address cannot be confused for one another.
     function basesUsed(result, marker) {
         var seen = [];
-        result.requested.forEach(function (url) {
+        result.requested.forEach((url) => {
             var at = url.indexOf(marker);
-            if (at === -1) { return; }
+            if (at === -1) {
+                return;
+            }
             var base = url.slice(0, at);
-            if (seen.indexOf(base) === -1) { seen.push(base); }
+            if (seen.indexOf(base) === -1) {
+                seen.push(base);
+            }
         });
         return seen;
     }
 
-    function populators(result)   { return basesUsed(result, '/cloud-product-descriptors/'); }
-    function measurements(result) { return basesUsed(result, '/device-measurements/'); }
+    function populators(result) {
+        return basesUsed(result, '/cloud-product-descriptors/');
+    }
+    function measurements(result) {
+        return basesUsed(result, '/device-measurements/');
+    }
 
-    describe('a named deployment', function () {
-        it('resolves sys to the app-sys populator and the beta-cloud measurements api', function () {
+    describe('a named deployment', () => {
+        it('resolves sys to the app-sys populator and the beta-cloud measurements api', () => {
             var result = run(['--target', 'sys']);
 
             expect(populators(result)).to.deep.equal(['https://app-sys.linn.co.uk']);
             expect(measurements(result)).to.deep.equal(['https://beta-cloud.linn.co.uk']);
         });
 
-        it('resolves prod-new to the app populator and the cloud measurements api', function () {
+        it('resolves prod-new to the app populator and the cloud measurements api', () => {
             var result = run(['--target', 'prod-new', '--yes-write-to-prod']);
 
             expect(populators(result)).to.deep.equal(['https://app.linn.co.uk']);
             expect(measurements(result)).to.deep.equal(['https://cloud.linn.co.uk']);
         });
 
-        it('resolves prod-old to the ecs-internal populator over plain http, which is all it listens on', function () {
+        it('resolves prod-old to the ecs-internal populator over plain http, which is all it listens on', () => {
             var result = run(['--target', 'prod-old', '--yes-write-to-prod']);
 
             expect(populators(result)).to.deep.equal([
-                'http://internal-ecs-internal-288575285.eu-west-1.elb.amazonaws.com'
+                'http://internal-ecs-internal-288575285.eu-west-1.elb.amazonaws.com',
             ]);
             expect(measurements(result)).to.deep.equal(['https://cloud.linn.co.uk']);
         });
@@ -125,23 +138,23 @@ describe('smoke-test target resolution', function () {
         // The case that separates prod-dual from prod-new: both name the app populator and the cloud
         // api, and only the SECOND populator tells them apart. A resolver that dropped it would satisfy
         // every other assertion here.
-        it('resolves prod-dual to BOTH prod populators, which is what makes it the dual-homing check', function () {
+        it('resolves prod-dual to BOTH prod populators, which is what makes it the dual-homing check', () => {
             var result = run(['--target', 'prod-dual', '--yes-write-to-prod']);
 
             expect(populators(result)).to.deep.equal([
                 'https://app.linn.co.uk',
-                'http://internal-ecs-internal-288575285.eu-west-1.elb.amazonaws.com'
+                'http://internal-ecs-internal-288575285.eu-west-1.elb.amazonaws.com',
             ]);
             expect(measurements(result)).to.deep.equal(['https://cloud.linn.co.uk']);
         });
     });
 
-    describe('refusals', function () {
+    describe('refusals', () => {
         // The shorthand must not become a way past the production acknowledgement. Asserting that
         // NOTHING was requested is the point: an exit code alone would still pass if the refusal
         // happened after the first request went out.
-        ['prod-new', 'prod-old', 'prod-dual'].forEach(function (target) {
-            it('refuses ' + target + ' without --yes-write-to-prod, before making any request', function () {
+        ['prod-new', 'prod-old', 'prod-dual'].forEach((target) => {
+            it(`refuses ${target} without --yes-write-to-prod, before making any request`, () => {
                 var result = run(['--target', target]);
 
                 expect(result.status).to.not.equal(0);
@@ -154,7 +167,7 @@ describe('smoke-test target resolution', function () {
         // the same absence of requests - an outcome-only assertion here passes with this arm deleted
         // and pins nothing. What the arm buys is a diagnosis that names the flag the caller actually
         // typed, and that is the only thing that distinguishes the two paths.
-        it('names the unknown target and the known ones, rather than complaining about --env', function () {
+        it('names the unknown target and the known ones, rather than complaining about --env', () => {
             var result = run(['--target', 'staging']);
 
             expect(result.status).to.equal(64);
@@ -165,21 +178,21 @@ describe('smoke-test target resolution', function () {
 
         // Both orders, deliberately. A check made inside the --target arm alone would accept
         // `--env sys --target sys`, because --env has already been consumed by the time it runs.
-        it('refuses --target after --env', function () {
+        it('refuses --target after --env', () => {
             var result = run(['--env', 'sys', '--target', 'sys']);
 
             expect(result.status).to.equal(64);
             expect(result.requested).to.deep.equal([]);
         });
 
-        it('refuses --env after --target', function () {
+        it('refuses --env after --target', () => {
             var result = run(['--target', 'sys', '--env', 'sys']);
 
             expect(result.status).to.equal(64);
             expect(result.requested).to.deep.equal([]);
         });
 
-        it('refuses a second --target rather than running a four-endpoint mixture', function () {
+        it('refuses a second --target rather than running a four-endpoint mixture', () => {
             var result = run(['--target', 'sys', '--target', 'prod-new']);
 
             expect(result.status).to.equal(64);
@@ -191,9 +204,9 @@ describe('smoke-test target resolution', function () {
     // listener rule, so the load balancer answered its default instead of the service. The probe that
     // provoked it is gone, but the same status can still come back from a publish, and a bare "-> 302"
     // sends a reader hunting for a fault in a service that never saw the request.
-    describe('a load balancer answering instead of the service', function () {
-        ['302', '403', '401'].forEach(function (status) {
-            it('explains a ' + status + ' as a routing gap rather than reporting it bare', function () {
+    describe('a load balancer answering instead of the service', () => {
+        ['302', '403', '401'].forEach((status) => {
+            it(`explains a ${status} as a routing gap rather than reporting it bare`, () => {
                 var result = run(['--target', 'sys'], { STUB_STATUS: status });
 
                 expect(result.stdout).to.contain("the load balancer's default action");
@@ -201,26 +214,29 @@ describe('smoke-test target resolution', function () {
             });
         });
 
-        it('does not explain away a genuine service error', function () {
+        it('does not explain away a genuine service error', () => {
             var result = run(['--target', 'sys'], { STUB_STATUS: '500' });
 
             expect(result.stdout).to.not.contain("the load balancer's default action");
         });
     });
 
-    describe('the explicit form', function () {
-        it('is unchanged by the shorthand existing', function () {
+    describe('the explicit form', () => {
+        it('is unchanged by the shorthand existing', () => {
             var result = run([
-                '--env', 'sys',
-                '--populator', 'http://populator.example',
-                '--measurements', 'http://measurements.example'
+                '--env',
+                'sys',
+                '--populator',
+                'http://populator.example',
+                '--measurements',
+                'http://measurements.example',
             ]);
 
             expect(populators(result)).to.deep.equal(['http://populator.example']);
             expect(measurements(result)).to.deep.equal(['http://measurements.example']);
         });
 
-        it('still adds addresses given alongside a target', function () {
+        it('still adds addresses given alongside a target', () => {
             var result = run(['--target', 'sys', '--populator', 'http://extra.example']);
 
             expect(populators(result)).to.include('https://app-sys.linn.co.uk');
