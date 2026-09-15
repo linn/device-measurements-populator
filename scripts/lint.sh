@@ -20,6 +20,20 @@ BIOME=./node_modules/.bin/biome
 
 case "${1:-}" in
   --write) "$BIOME" check --write . ;;
-  '')      "$BIOME" ci --error-on-warnings . ;;
+  # The output is captured so the FILE COUNT can be checked, not just the exit code. `biome ci` exits 0
+  # when it matches nothing but biome.json itself - its own "No files were processed" guard cannot fire,
+  # because the config is always in scope and counts as a processed file. So a files.includes that stops
+  # matching source, or a new .gitignore line (vcs.useIgnoreFile makes .gitignore a live input to the
+  # lint set), empties this gate silently and it still reports success.
+  '')
+    out=$("$BIOME" ci --error-on-warnings . 2>&1) && status=0 || status=$?
+    printf '%s\n' "$out"
+    checked=$(printf '%s' "$out" | sed -n 's/.*Checked \([0-9][0-9]*\) file.*/\1/p' | head -1)
+    [ -n "$checked" ] && [ "$checked" -ge 2 ] || {
+      echo "lint inspected ${checked:-no} file(s) - it is not covering the source tree" >&2
+      exit 1
+    }
+    exit "$status"
+    ;;
   *)       echo "usage: lint.sh [--write]" >&2; exit 2 ;;
 esac
