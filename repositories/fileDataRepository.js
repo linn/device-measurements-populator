@@ -1,5 +1,4 @@
-"use strict";
-
+'use strict';
 var config = require('../config');
 var S3Repository = require('./lib/s3Repository');
 

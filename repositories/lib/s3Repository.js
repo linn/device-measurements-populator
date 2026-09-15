@@ -1,5 +1,4 @@
-"use strict";
-
+'use strict';
 // AWS SDK v3. The callback signatures are unchanged from the v2 implementation, and so is the shape
 // each one yields, including `findBy` returning `data` as a Buffer - v3 hands back a stream where v2
 // handed back a Buffer, so that conversion is doing real work rather than tidying.
@@ -11,8 +10,8 @@ const {
     DeleteObjectCommand,
     waitUntilObjectExists,
     waitUntilObjectNotExists,
-} = require("@aws-sdk/client-s3");
-const { v1: uuidv1 } = require("uuid");
+} = require('@aws-sdk/client-s3');
+const { v1: uuidv1 } = require('uuid');
 
 // v2's waitFor('objectExists') defaulted to 20 attempts at 5s. Kept at the same order of magnitude
 // so a slow consistency window that used to succeed still does.
@@ -23,16 +22,24 @@ const WAIT_SECONDS = 100;
 // unhandled rejection carrying the SDK's stack instead of an error at the site that threw.
 function settle(promise, onResolved, callback) {
     promise.then(
-        function (result) {
+        (result) => {
             let value;
             try {
                 value = onResolved(result);
             } catch (err) {
-                return process.nextTick(function () { callback(err); });
+                return process.nextTick(() => {
+                    callback(err);
+                });
             }
-            process.nextTick(function () { callback(null, value); });
+            process.nextTick(() => {
+                callback(null, value);
+            });
         },
-        function (err) { process.nextTick(function () { callback(err); }); }
+        (err) => {
+            process.nextTick(() => {
+                callback(err);
+            });
+        }
     );
 }
 
@@ -40,7 +47,7 @@ module.exports = function S3Repository(awsRegion, bucketName) {
     const s3 = new S3Client({ region: awsRegion });
 
     function generateUri(key) {
-        return 'http://' + bucketName + ".s3.amazonaws.com/" + key;
+        return `http://${bucketName}.s3.amazonaws.com/${key}`;
     }
 
     function saveFileToS3(id, filename, buffer, callback) {
@@ -48,19 +55,21 @@ module.exports = function S3Repository(awsRegion, bucketName) {
             Bucket: bucketName,
             Key: id,
             Body: buffer,
-            ContentDisposition: 'attachment; filename=' + filename,
+            ContentDisposition: `attachment; filename=${filename}`,
             Metadata: {
-                'originalfilename': filename
-            }
+                originalfilename: filename,
+            },
         };
         settle(
-            s3.send(new PutObjectCommand(params)).then(function () {
-                return waitUntilObjectExists(
-                    { client: s3, maxWaitTime: WAIT_SECONDS },
-                    { Bucket: params.Bucket, Key: params.Key }
-                );
-            }),
-            function () { return { key: params.Key, href: generateUri(params.Key) }; },
+            s3
+                .send(new PutObjectCommand(params))
+                .then(() =>
+                    waitUntilObjectExists(
+                        { client: s3, maxWaitTime: WAIT_SECONDS },
+                        { Bucket: params.Bucket, Key: params.Key }
+                    )
+                ),
+            () => ({ key: params.Key, href: generateUri(params.Key) }),
             callback
         );
     }
@@ -75,13 +84,11 @@ module.exports = function S3Repository(awsRegion, bucketName) {
 
     function loadFileFromS3(id, callback) {
         settle(
-            s3.send(new GetObjectCommand({ Bucket: bucketName, Key: id })).then(async function (results) {
-                return {
-                    filename: results.Metadata && results.Metadata.originalfilename,
-                    data: Buffer.from(await results.Body.transformToByteArray())
-                };
-            }),
-            function (result) { return result; },
+            s3.send(new GetObjectCommand({ Bucket: bucketName, Key: id })).then(async (results) => ({
+                filename: results.Metadata?.originalfilename,
+                data: Buffer.from(await results.Body.transformToByteArray()),
+            })),
+            (result) => result,
             callback
         );
     }
@@ -89,10 +96,10 @@ module.exports = function S3Repository(awsRegion, bucketName) {
     function removeFileFromS3(id, callback) {
         const params = { Bucket: bucketName, Key: id };
         settle(
-            s3.send(new DeleteObjectCommand(params)).then(function () {
-                return waitUntilObjectNotExists({ client: s3, maxWaitTime: WAIT_SECONDS }, params);
-            }),
-            function (result) { return result; },
+            s3
+                .send(new DeleteObjectCommand(params))
+                .then(() => waitUntilObjectNotExists({ client: s3, maxWaitTime: WAIT_SECONDS }, params)),
+            (result) => result,
             callback
         );
     }
@@ -102,6 +109,6 @@ module.exports = function S3Repository(awsRegion, bucketName) {
         addOrReplace: addFileByIdToS3,
         add: addFileToS3,
         findBy: loadFileFromS3,
-        removeBy: removeFileFromS3
+        removeBy: removeFileFromS3,
     };
 };

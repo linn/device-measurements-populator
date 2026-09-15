@@ -35,6 +35,9 @@ is_positive_integer () {
 # Every arm builds and tests. Declaring a `script:` key replaces the node_js language default, so if the
 # suite is not named here it runs nowhere.
 ./build.sh
+# After build.sh, which installs the tree biome comes from, and before the suite: a formatting or lint
+# violation is the cheapest failure available here, and reporting it after a deploy wastes the job.
+./lint.sh
 ./test.sh
 
 if [ "${TRAVIS_BRANCH}" != "master" ]; then

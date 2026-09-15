@@ -1,10 +1,10 @@
-"use strict";
-var chai = require("chai");
+'use strict';
+var chai = require('chai');
 /*jshint -W079 */
 var expect = chai.expect;
 
-var fs = require('fs');
-var path = require('path');
+var fs = require('node:fs');
+var path = require('node:path');
 
 // What the deployed template must say about logging.
 //
@@ -31,66 +31,78 @@ function stripComments(line) {
 
 function resourceBlocks() {
     var lines = fs.readFileSync(TEMPLATE, 'utf8').split('\n');
-    var start = lines.findIndex(function (l) { return /^Resources:\s*$/.test(l); });
+    var start = lines.findIndex((l) => /^Resources:\s*$/.test(l));
     expect(start, 'the template has no Resources section').to.be.greaterThan(-1);
 
     var blocks = {};
     var current = null;
-    for (var i = start + 1; i < lines.length; i++) {
-        var raw = lines[i];
-        if (/^\S/.test(raw) && raw.trim() !== '') { break; }          // next top-level section
-        if (/^\s*#/.test(raw) || raw.trim() === '') { continue; }     // comment or blank
-        var header = /^ {2}(\w+):\s*$/.exec(raw);
-        if (header) { current = header[1]; blocks[current] = []; continue; }
-        if (current) { blocks[current].push(stripComments(raw)); }
+    for (let i = start + 1; i < lines.length; i++) {
+        const raw = lines[i];
+        if (/^\S/.test(raw) && raw.trim() !== '') {
+            break;
+        } // next top-level section
+        if (/^\s*#/.test(raw) || raw.trim() === '') {
+            continue;
+        } // comment or blank
+        const header = /^ {2}(\w+):\s*$/.exec(raw);
+        if (header) {
+            current = header[1];
+            blocks[current] = [];
+            continue;
+        }
+        if (current) {
+            blocks[current].push(stripComments(raw));
+        }
     }
-    Object.keys(blocks).forEach(function (k) { blocks[k] = blocks[k].join('\n'); });
+    Object.keys(blocks).forEach((k) => {
+        blocks[k] = blocks[k].join('\n');
+    });
     return blocks;
 }
 
-function valueOf(block, key) {
-    var m = new RegExp('^\\s*' + key + ':\\s*(.+?)\\s*$', 'm').exec(block || '');
+function fieldValue(block, key) {
+    var m = new RegExp(`^\\s*${key}:\\s*(.+?)\\s*$`, 'm').exec(block || '');
     return m ? m[1] : null;
 }
 
-describe('populator logging template', function () {
+describe('populator logging template', () => {
     var blocks;
 
-    before(function () {
+    before(() => {
         blocks = resourceBlocks();
     });
 
-    it('sends the container output to CloudWatch', function () {
+    it('sends the container output to CloudWatch', () => {
         expect(blocks.taskDefinition, 'no taskDefinition resource').to.be.a('string');
-        expect(valueOf(blocks.taskDefinition, 'LogDriver')).to.equal('awslogs');
+        expect(fieldValue(blocks.taskDefinition, 'LogDriver')).to.equal('awslogs');
     });
 
-    it('writes to the group the template declares, not one the driver invents', function () {
-        var driverGroup = valueOf(blocks.taskDefinition, 'awslogs-group');
-        var declaredGroup = valueOf(blocks.serviceLogGroup, 'LogGroupName');
+    it('writes to the group the template declares, not one the driver invents', () => {
+        var driverGroup = fieldValue(blocks.taskDefinition, 'awslogs-group');
+        var declaredGroup = fieldValue(blocks.serviceLogGroup, 'LogGroupName');
         expect(driverGroup, 'the driver names no group').to.not.equal(null);
         expect(declaredGroup, 'no group is declared').to.not.equal(null);
         // Quoting is not semantics: compare the expression, not how it was written.
         expect(driverGroup.replace(/['"]/g, '')).to.equal(declaredGroup.replace(/['"]/g, ''));
     });
 
-    it('never lets the driver create the group itself', function () {
+    it('never lets the driver create the group itself', () => {
         // awslogs-create-group defaults to false, and must stay that way: a driver-created group is
         // created with NO retention and never expires, which is the estate-wide problem that
         // linn/linn-api-development#641 removed from eighteen groups.
         expect(blocks.taskDefinition).to.not.match(/awslogs-create-group/);
     });
 
-    it('expires the group after exactly thirty days', function () {
-        expect(valueOf(blocks.serviceLogGroup, 'RetentionInDays')).to.equal('30');
+    it('expires the group after exactly thirty days', () => {
+        expect(fieldValue(blocks.serviceLogGroup, 'RetentionInDays')).to.equal('30');
     });
 
-    it('makes the SERVICE wait for the group, since that is what starts tasks', function () {
+    it('makes the SERVICE wait for the group, since that is what starts tasks', () => {
         // On the taskDefinition this would order nothing: a task definition never runs anything.
-        expect(valueOf(blocks.service, 'DependsOn')).to.equal('serviceLogGroup');
+        expect(fieldValue(blocks.service, 'DependsOn')).to.equal('serviceLogGroup');
     });
 
-    it('names the log streams after the service, so a stream can be traced to a task', function () {
-        expect(valueOf(blocks.taskDefinition, 'awslogs-stream-prefix')).to.not.equal(null);
+    it('names the log streams after the service, so a stream can be traced to a task', () => {
+        expect(fieldValue(blocks.taskDefinition, 'awslogs-stream-prefix')).to.not.equal(null);
     });
 });

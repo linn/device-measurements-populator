@@ -1,12 +1,12 @@
-"use strict";
-var chai = require("chai");
+'use strict';
+var chai = require('chai');
 /*jshint -W079 */
 var expect = chai.expect;
 
-var fs = require('fs');
-var os = require('os');
-var path = require('path');
-var execFileSync = require('child_process').execFileSync;
+var fs = require('node:fs');
+var os = require('node:os');
+var path = require('node:path');
+var execFileSync = require('node:child_process').execFileSync;
 
 // Which arm of the build runs, asserted through the real scripts/ci.sh rather than by reading it.
 //
@@ -15,38 +15,30 @@ var execFileSync = require('child_process').execFileSync;
 // touches AWS, and whether a failure part-way through stops the ones after it.
 //
 // PRECONDITION: bash on PATH. Nothing else - no docker, no network, no AWS.
-describe('CI arm selection', function () {
+describe('CI arm selection', () => {
     var workDir, calls;
 
-    var SUB_SCRIPTS = ['build', 'test', 'build-dockers', 'push-dockers', 'deploy'];
+    var SUB_SCRIPTS = ['build', 'lint', 'test', 'build-dockers', 'push-dockers', 'deploy'];
 
-    beforeEach(function () {
+    beforeEach(() => {
         workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-arm-'));
         fs.mkdirSync(path.join(workDir, 'scripts'));
-        fs.copyFileSync(
-            path.join(__dirname, '..', '..', 'scripts', 'ci.sh'),
-            path.join(workDir, 'scripts', 'ci.sh')
-        );
+        fs.copyFileSync(path.join(__dirname, '..', '..', 'scripts', 'ci.sh'), path.join(workDir, 'scripts', 'ci.sh'));
         calls = path.join(workDir, 'calls.txt');
-        SUB_SCRIPTS.forEach(function (name) {
+        SUB_SCRIPTS.forEach((name) => {
             stubSubScript(name, 0);
         });
     });
 
-    afterEach(function () {
+    afterEach(() => {
         fs.rmSync(workDir, { recursive: true, force: true });
     });
 
     // Appends its own name and arguments, so the assertions can be about ORDER as well as membership -
     // "deploy did not run" and "deploy ran before the push" are different defects.
     function stubSubScript(name, exitCode) {
-        var file = path.join(workDir, 'scripts', name + '.sh');
-        fs.writeFileSync(file, [
-            '#!/bin/bash',
-            'echo "' + name + ' $*" >> "' + calls + '"',
-            'exit ' + exitCode,
-            ''
-        ].join('\n'));
+        var file = path.join(workDir, 'scripts', `${name}.sh`);
+        fs.writeFileSync(file, ['#!/bin/bash', `echo "${name} $*" >> "${calls}"`, `exit ${exitCode}`, ''].join('\n'));
         fs.chmodSync(file, 0o755);
     }
 
@@ -58,7 +50,7 @@ describe('CI arm selection', function () {
             execFileSync('bash', ['scripts/ci.sh'], {
                 cwd: workDir,
                 env: Object.assign({ PATH: process.env.PATH, HOME: process.env.HOME }, travisEnv),
-                stdio: 'pipe'
+                stdio: 'pipe',
             });
         } catch (err) {
             status = err.status;
@@ -66,10 +58,12 @@ describe('CI arm selection', function () {
         return {
             status: status,
             ran: fs.existsSync(calls)
-                ? fs.readFileSync(calls, 'utf8').trim().split('\n').map(function (line) {
-                    return line.trim();
-                })
-                : []
+                ? fs
+                      .readFileSync(calls, 'utf8')
+                      .trim()
+                      .split('\n')
+                      .map((line) => line.trim())
+                : [],
         };
     }
 
@@ -77,63 +71,90 @@ describe('CI arm selection', function () {
         return Object.assign({ TRAVIS_BRANCH: 'master', TRAVIS_BUILD_NUMBER: '77' }, extra);
     }
 
-    describe('a branch build', function () {
-        it('tests but publishes nothing', function () {
-            var result = runCi({ TRAVIS_BRANCH: 'feat/some-branch', TRAVIS_PULL_REQUEST: 'false', TRAVIS_BUILD_NUMBER: '77' });
+    describe('a branch build', () => {
+        it('tests but publishes nothing', () => {
+            var result = runCi({
+                TRAVIS_BRANCH: 'feat/some-branch',
+                TRAVIS_PULL_REQUEST: 'false',
+                TRAVIS_BUILD_NUMBER: '77',
+            });
 
             expect(result.status).to.equal(0);
-            expect(result.ran).to.deep.equal(['build', 'test']);
+            expect(result.ran).to.deep.equal(['build', 'lint', 'test']);
         });
 
-        it('still tests when the branch name contains a slash, which no longer reaches a docker tag', function () {
+        it('still tests when the branch name contains a slash, which no longer reaches a docker tag', () => {
             var result = runCi({ TRAVIS_BRANCH: 'feat/a/b', TRAVIS_PULL_REQUEST: 'false', TRAVIS_BUILD_NUMBER: '77' });
 
             expect(result.status).to.equal(0);
             expect(result.ran).to.include('test');
         });
 
-        it('is not failed for a build number it never uses', function () {
+        it('is not failed for a build number it never uses', () => {
             var result = runCi({ TRAVIS_BRANCH: 'feat/some-branch', TRAVIS_PULL_REQUEST: 'false' });
 
             expect(result.status).to.equal(0);
-            expect(result.ran).to.deep.equal(['build', 'test']);
+            expect(result.ran).to.deep.equal(['build', 'lint', 'test']);
         });
 
-        it('is not failed for a pull-request value it never reads', function () {
+        it('is not failed for a pull-request value it never reads', () => {
             var result = runCi({ TRAVIS_BRANCH: 'feat/some-branch', TRAVIS_BUILD_NUMBER: '77' });
 
             expect(result.status).to.equal(0);
-            expect(result.ran).to.deep.equal(['build', 'test']);
+            expect(result.ran).to.deep.equal(['build', 'lint', 'test']);
         });
     });
 
-    describe('a master build', function () {
-        it('publishes an image and does not deploy, because prod is deployed by hand', function () {
+    describe('a master build', () => {
+        it('publishes an image and does not deploy, because prod is deployed by hand', () => {
             var result = runCi(onMaster({ TRAVIS_PULL_REQUEST: 'false' }));
 
             expect(result.status).to.equal(0);
-            expect(result.ran).to.deep.equal(['build', 'test', 'build-dockers', 'push-dockers']);
+            expect(result.ran).to.deep.equal(['build', 'lint', 'test', 'build-dockers', 'push-dockers']);
         });
 
-        it('deploys sys for a pull request, after the image has been pushed', function () {
+        it('deploys sys for a pull request, after the image has been pushed', () => {
             var result = runCi(onMaster({ TRAVIS_PULL_REQUEST: '10' }));
 
             expect(result.status).to.equal(0);
-            expect(result.ran).to.deep.equal(['build', 'test', 'build-dockers', 'push-dockers', 'deploy sys 77']);
+            expect(result.ran).to.deep.equal([
+                'build',
+                'lint',
+                'test',
+                'build-dockers',
+                'push-dockers',
+                'deploy sys 77',
+            ]);
         });
     });
 
-    describe('a value it cannot interpret', function () {
+    describe('a value it cannot interpret', () => {
         // Each of these reached an accepting arm at some point during this change. The trailing-text
         // cases are the ones that matter: a case pattern's `*` is "any string", not "repeat the previous
         // class", so `[1-9][0-9]*` looks like it validates an integer and validates two characters.
         var REFUSED_PULL_REQUESTS = [
-            '', '0', '007', '+1', 'true', 'False', 'false ', ' false', 'abc',
-            '10x', '12abc', '12 x', '12; echo pwned', '1 2', '1e9', '*', '?', '10.5'
+            '',
+            '0',
+            '007',
+            '+1',
+            'true',
+            'False',
+            'false ',
+            ' false',
+            'abc',
+            '10x',
+            '12abc',
+            '12 x',
+            '12; echo pwned',
+            '1 2',
+            '1e9',
+            '*',
+            '?',
+            '10.5',
         ];
 
-        REFUSED_PULL_REQUESTS.forEach(function (value) {
-            it('refuses to decide on TRAVIS_PULL_REQUEST=' + JSON.stringify(value) + ', and publishes nothing', function () {
+        REFUSED_PULL_REQUESTS.forEach((value) => {
+            it(`refuses to decide on TRAVIS_PULL_REQUEST=${JSON.stringify(value)}, and publishes nothing`, () => {
                 var result = runCi(onMaster({ TRAVIS_PULL_REQUEST: value }));
 
                 expect(result.status).to.equal(1);
@@ -142,7 +163,7 @@ describe('CI arm selection', function () {
             });
         });
 
-        it('refuses when TRAVIS_PULL_REQUEST is absent entirely, rather than reading absence as a pull request', function () {
+        it('refuses when TRAVIS_PULL_REQUEST is absent entirely, rather than reading absence as a pull request', () => {
             var result = runCi(onMaster({}));
 
             expect(result.status).to.equal(1);
@@ -151,25 +172,34 @@ describe('CI arm selection', function () {
 
         var REFUSED_BUILD_NUMBERS = ['', '0', '007', 'abc', '12abc', '12; echo pwned', '1 2'];
 
-        REFUSED_BUILD_NUMBERS.forEach(function (value) {
-            it('refuses to publish under TRAVIS_BUILD_NUMBER=' + JSON.stringify(value) + ', which would be the image tag', function () {
-                var result = runCi({ TRAVIS_BRANCH: 'master', TRAVIS_PULL_REQUEST: '10', TRAVIS_BUILD_NUMBER: value });
+        REFUSED_BUILD_NUMBERS.forEach((value) => {
+            it(
+                'refuses to publish under TRAVIS_BUILD_NUMBER=' +
+                    JSON.stringify(value) +
+                    ', which would be the image tag',
+                () => {
+                    var result = runCi({
+                        TRAVIS_BRANCH: 'master',
+                        TRAVIS_PULL_REQUEST: '10',
+                        TRAVIS_BUILD_NUMBER: value,
+                    });
 
-                expect(result.status).to.equal(1);
-                expect(result.ran).to.not.include('build-dockers');
-            });
+                    expect(result.status).to.equal(1);
+                    expect(result.ran).to.not.include('build-dockers');
+                }
+            );
         });
 
         // The silent one: an empty branch misses the master gate, takes the branch arm and exits 0, so
         // the whole build reads as a successful no-publish.
-        it('refuses an empty TRAVIS_BRANCH rather than silently publishing nothing', function () {
+        it('refuses an empty TRAVIS_BRANCH rather than silently publishing nothing', () => {
             var result = runCi({ TRAVIS_BRANCH: '', TRAVIS_PULL_REQUEST: 'false', TRAVIS_BUILD_NUMBER: '77' });
 
             expect(result.status).to.equal(1);
             expect(result.ran).to.deep.equal([]);
         });
 
-        it('refuses an absent TRAVIS_BRANCH for the same reason', function () {
+        it('refuses an absent TRAVIS_BRANCH for the same reason', () => {
             var result = runCi({ TRAVIS_PULL_REQUEST: 'false', TRAVIS_BUILD_NUMBER: '77' });
 
             expect(result.status).to.equal(1);
@@ -177,19 +207,19 @@ describe('CI arm selection', function () {
         });
     });
 
-    describe('a failure part-way through', function () {
+    describe('a failure part-way through', () => {
         // This is the property that moving the docker steps out of Travis's after_success bought, and it
         // is invisible to any assertion about a passing build.
-        it('stops at a failing suite and publishes nothing', function () {
+        it('stops at a failing suite and publishes nothing', () => {
             stubSubScript('test', 3);
 
             var result = runCi(onMaster({ TRAVIS_PULL_REQUEST: '10' }));
 
             expect(result.status).to.equal(3);
-            expect(result.ran).to.deep.equal(['build', 'test']);
+            expect(result.ran).to.deep.equal(['build', 'lint', 'test']);
         });
 
-        it('does not deploy when the push failed', function () {
+        it('does not deploy when the push failed', () => {
             stubSubScript('push-dockers', 5);
 
             var result = runCi(onMaster({ TRAVIS_PULL_REQUEST: '10' }));
@@ -198,7 +228,7 @@ describe('CI arm selection', function () {
             expect(result.ran).to.not.include('deploy sys 77');
         });
 
-        it('does not push when the image build failed', function () {
+        it('does not push when the image build failed', () => {
             stubSubScript('build-dockers', 7);
 
             var result = runCi(onMaster({ TRAVIS_PULL_REQUEST: '10' }));

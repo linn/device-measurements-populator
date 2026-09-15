@@ -1,10 +1,13 @@
 {
   "name": "CloudExaktPopulator",
   "version": "0.0.0",
+  "type": "commonjs",
   "private": true,
   "scripts": {
     "start": "node ./bin/www",
-    "test": "mocha -t 20000 --recursive -R spec test/"
+    "test": "mocha -t 20000 --recursive -R spec test/",
+    "lint": "biome ci --error-on-warnings .",
+    "format": "biome check --write ."
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.700.0",
@@ -24,6 +27,7 @@
     "winston": "^3.19.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.13",
     "chai": "^4.5.0",
     "mocha": "^11.0.0",
     "proxyquire": "^2.1.3",
