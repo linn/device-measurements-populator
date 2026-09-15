@@ -1,3 +1,4 @@
+'use strict';
 var chai = require('chai');
 /*jshint -W079 */
 var expect = chai.expect;

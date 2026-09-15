@@ -1,3 +1,4 @@
+'use strict';
 // AWS SDK v3. The callback signatures are unchanged from the v2 implementation, and so is the shape
 // each one yields, including `findBy` returning `data` as a Buffer - v3 hands back a stream where v2
 // handed back a Buffer, so that conversion is doing real work rather than tidying.

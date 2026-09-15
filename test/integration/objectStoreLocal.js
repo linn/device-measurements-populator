@@ -1,3 +1,4 @@
+'use strict';
 // Runtime precondition: docker must be running and able to pull the emulator image below. Travis
 // already declares docker as a service for this repository.
 //

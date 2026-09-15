@@ -1,3 +1,4 @@
+'use strict';
 var cloudProductDescriptorManager = require('../cloudProductDescriptorManager');
 var cloudDeviceManager = require('../cloudDeviceManager');
 var unpublishService = require('../unpublishService');

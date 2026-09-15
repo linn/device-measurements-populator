@@ -1,9 +1,9 @@
+'use strict';
 var productDescriptorRepository = require('./repositories/cloudProductDescriptorRepository');
 
 var cloudComponentProcessor = require('./cloudComponentProcessor');
 var async = require('async');
 var _ = require('underscore');
-var _helpers = require('./helpers');
 
 function addToProductDescriptorRepository(productDescriptorResource, callback) {
     productDescriptorRepository.addOrReplace(productDescriptorResource, (err) => {

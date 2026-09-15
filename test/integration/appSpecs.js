@@ -1,3 +1,4 @@
+'use strict';
 // app.js had no coverage, and this change rewires it: express 4 to 5, body-parser to express's own
 // parsers, and the jade view engine to pug. None of those failures is visible to the specs that
 // exercise routes in isolation - each shows up only when the assembled app serves a request.

@@ -1,3 +1,4 @@
+'use strict';
 // Round-trip coverage for the data-access layer. It had none: every other spec in this suite
 // replaces the repository modules wholesale with proxyquire stubs, so the code that actually talks
 // to DynamoDB was never executed by a test. A malformed key condition is accepted by a stub and

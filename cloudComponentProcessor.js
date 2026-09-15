@@ -1,3 +1,4 @@
+'use strict';
 var fileDataRepository = require('./repositories/fileDataRepository');
 
 var _ = require('underscore');

@@ -1,3 +1,4 @@
+'use strict';
 // Replaces the abandoned `repository-dynamodb` package, which reached the AWS SDK v2 and
 // `dynamodb-doc` - both end-of-support - through its own dependencies rather than ours.
 //

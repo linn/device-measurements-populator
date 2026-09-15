@@ -1,3 +1,4 @@
+'use strict';
 const config = require('12factor-config');
 const dotenv = require('dotenv');
 

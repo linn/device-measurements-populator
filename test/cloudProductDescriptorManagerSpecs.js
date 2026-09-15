@@ -1,3 +1,4 @@
+'use strict';
 var proxyquire = require('proxyquire');
 
 var chai = require('chai');

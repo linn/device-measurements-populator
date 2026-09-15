@@ -1,3 +1,4 @@
+'use strict';
 const config = require('../config');
 const Repository = require('./lib/dynamoRepository');
 const repository = new Repository(config.awsRegion, config.productDescriptorsTableName, 'id');

@@ -1,3 +1,4 @@
+'use strict';
 var chai = require('chai');
 /*jshint -W079 */
 var expect = chai.expect;
@@ -17,7 +18,7 @@ var execFileSync = require('node:child_process').execFileSync;
 describe('CI arm selection', () => {
     var workDir, calls;
 
-    var SUB_SCRIPTS = ['build', 'test', 'build-dockers', 'push-dockers', 'deploy'];
+    var SUB_SCRIPTS = ['build', 'lint', 'test', 'build-dockers', 'push-dockers', 'deploy'];
 
     beforeEach(() => {
         workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-arm-'));
@@ -79,7 +80,7 @@ describe('CI arm selection', () => {
             });
 
             expect(result.status).to.equal(0);
-            expect(result.ran).to.deep.equal(['build', 'test']);
+            expect(result.ran).to.deep.equal(['build', 'lint', 'test']);
         });
 
         it('still tests when the branch name contains a slash, which no longer reaches a docker tag', () => {
@@ -93,14 +94,14 @@ describe('CI arm selection', () => {
             var result = runCi({ TRAVIS_BRANCH: 'feat/some-branch', TRAVIS_PULL_REQUEST: 'false' });
 
             expect(result.status).to.equal(0);
-            expect(result.ran).to.deep.equal(['build', 'test']);
+            expect(result.ran).to.deep.equal(['build', 'lint', 'test']);
         });
 
         it('is not failed for a pull-request value it never reads', () => {
             var result = runCi({ TRAVIS_BRANCH: 'feat/some-branch', TRAVIS_BUILD_NUMBER: '77' });
 
             expect(result.status).to.equal(0);
-            expect(result.ran).to.deep.equal(['build', 'test']);
+            expect(result.ran).to.deep.equal(['build', 'lint', 'test']);
         });
     });
 
@@ -109,14 +110,21 @@ describe('CI arm selection', () => {
             var result = runCi(onMaster({ TRAVIS_PULL_REQUEST: 'false' }));
 
             expect(result.status).to.equal(0);
-            expect(result.ran).to.deep.equal(['build', 'test', 'build-dockers', 'push-dockers']);
+            expect(result.ran).to.deep.equal(['build', 'lint', 'test', 'build-dockers', 'push-dockers']);
         });
 
         it('deploys sys for a pull request, after the image has been pushed', () => {
             var result = runCi(onMaster({ TRAVIS_PULL_REQUEST: '10' }));
 
             expect(result.status).to.equal(0);
-            expect(result.ran).to.deep.equal(['build', 'test', 'build-dockers', 'push-dockers', 'deploy sys 77']);
+            expect(result.ran).to.deep.equal([
+                'build',
+                'lint',
+                'test',
+                'build-dockers',
+                'push-dockers',
+                'deploy sys 77',
+            ]);
         });
     });
 
@@ -208,7 +216,7 @@ describe('CI arm selection', () => {
             var result = runCi(onMaster({ TRAVIS_PULL_REQUEST: '10' }));
 
             expect(result.status).to.equal(3);
-            expect(result.ran).to.deep.equal(['build', 'test']);
+            expect(result.ran).to.deep.equal(['build', 'lint', 'test']);
         });
 
         it('does not deploy when the push failed', () => {

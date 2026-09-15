@@ -1,3 +1,4 @@
+'use strict';
 // The S3 layer had no coverage: every spec that touches it replaces it with a mockery stub. This
 // change moves it from AWS SDK v2 to v3, where GetObject returns a stream rather than a Buffer, so
 // the shape callers receive is the thing most likely to break and the thing a stub cannot check.

@@ -1,3 +1,4 @@
+'use strict';
 // The re-measurement path, end to end, with the REAL DynamoDB repository and only S3 stubbed.
 //
 // This is the shape that broke: cloudDeviceManager.add runs a two-task async.waterfall whose first

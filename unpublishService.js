@@ -1,3 +1,4 @@
+'use strict';
 var deviceRepository = require('./repositories/cloudDeviceRepository');
 var cloudDeviceManager = require('./cloudDeviceManager');
 var cloudProductDescriptorManager = require('./cloudProductDescriptorManager');

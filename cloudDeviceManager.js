@@ -1,9 +1,9 @@
+'use strict';
 var deviceRepository = require('./repositories/cloudDeviceRepository');
 
 var cloudComponentProcessor = require('./cloudComponentProcessor');
 var async = require('async');
 var _ = require('underscore');
-var _helpers = require('./helpers');
 
 function addToDeviceRepository(deviceResource, callback) {
     deviceRepository.addOrReplace(deviceResource, (err) => {
