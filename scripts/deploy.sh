@@ -93,18 +93,21 @@ if [ "$ENVIRONMENT" = prod ]; then
   # repository is the image name as docker records it in RepoDigests - for Docker Hub, with no host.
   #
   # `{{json .Manifest}}` rather than `{{.Manifest.Digest}}`: buildx 0.10 ignores the latter and prints its
-  # human-readable report instead. For a multi-platform index the index's own digest is printed first,
-  # and its children's after it. A failed lookup yields no digest line, which the case below refuses.
+  # human-readable report instead. For a multi-platform index the index's own digest comes first and its
+  # children's after it. The JSON is split on its punctuation so each field is a line of its own however
+  # it is formatted - on one line, a greedy match would take the LAST digest, a child's. A failed lookup
+  # yields no digest line, which the case below refuses.
   IMAGE=linn/device-measurements-populator
   DIGEST=$(docker buildx imagetools inspect "$IMAGE:$DOCKER_TAG" --format '{{json .Manifest}}' \
-    | sed -n 's/.*"digest": *"\(sha256:[0-9a-f]\{64\}\)".*/\1/p' | head -n 1)
+    | tr ',{}[]' '\n' \
+    | sed -n 's/^ *"digest": *"\(sha256:[0-9a-f]\{64\}\)" *$/\1/p' | head -n 1)
   case "$DIGEST" in
     sha256:*) ;;
-    *) echo "deploy.sh: could not resolve the digest of $IMAGE:$DOCKER_TAG (not pushed, or not logged in to Docker Hub)" >&2; exit 1 ;;
+    *) echo "deploy.sh: could not resolve the digest of $IMAGE:$DOCKER_TAG - the tag may not be pushed, docker buildx may be missing, or the registry unreachable" >&2; exit 1 ;;
   esac
   SBOM_KEY="components/image/$IMAGE/$DIGEST.cdx.json"
   aws s3api head-object --bucket linn-api-infrastructure-prod-sbom-store --key "$SBOM_KEY" >/dev/null \
-    || { echo "deploy.sh: prod's SBOM store has no document at $SBOM_KEY (or no access) - deploy only a master build whose CI run went green" >&2; exit 1; }
+    || { echo "deploy.sh: no SBOM for this image at s3://linn-api-infrastructure-prod-sbom-store/$SBOM_KEY - either it was never filed (deploy only a master build whose CI run went green) or these credentials cannot read the store" >&2; exit 1; }
 fi
 
 if [ "$MODE" = --review ]; then

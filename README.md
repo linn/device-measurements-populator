@@ -53,8 +53,7 @@ So a prod deploy has no SBOM step of its own. Instead, `deploy.sh prod` checks f
 tag's digest in Docker Hub and **refuses to deploy unless prod's store holds a document for it**. That
 refuses a pull-request build's image, which is documented only in sys's store, and a `master` build
 whose emit failed after its push. The check also runs under `--review`. For it, the machine running the
-deploy needs `docker` with `buildx`, logged in to Docker Hub, and AWS credentials that can read prod's
-store.
+deploy needs `docker` with the `buildx` plugin, and AWS credentials that can read prod's store.
 
 ### The first prod deploy is a cutover
 
@@ -73,9 +72,13 @@ one as well. So the order is:
    - `populator-temp` must be in the same VPC as the estate cluster, and its health check must pass
      against the new image, or the new service never becomes stable.
 2. **Read the change set:** `bash scripts/deploy.sh prod <build-number> --review`, then check the change
-   set in the console. A refusal naming the SBOM store means the build is not one to deploy. The ECS service should show `Replacement: True`. It is replaced, not updated,
+   set in the console. The ECS service should show `Replacement: True`. It is replaced, not updated,
    because the template drops the custom service `Role` (a service with two target groups must use the
    service-linked role) and changes its cluster.
+
+   If the run refuses for want of an SBOM, either that build is not one to deploy or your credentials
+   cannot read prod's store; the message names the key it looked for (§ *Every deployed image has an
+   SBOM*).
 3. **Deploy dual-homed:** `bash scripts/deploy.sh prod <build-number>`, where the build number is a
    green `master` build's (see § *Every deployed image has an SBOM*). CloudFormation creates the new
    service and waits for it to be stable; the 2016 service keeps serving throughout and is deleted only in
@@ -92,5 +95,7 @@ one as well. So the order is:
 
 After step 3 there is no way back to the 2016 service - its cleanup deletes it - so a problem found in
 steps 4 or 5 is fixed forward: redeploy an earlier `master` build number. It must be one built after
-SBOM emission was added, since an older build has no document in prod's store and `deploy.sh` refuses it. The new service stays
-registered with `populator-temp` until step 6, so callers on `ecs-internal` are unaffected either way.
+SBOM emission was added, since an older build has no document in prod's store and `deploy.sh` refuses
+it - so if step 3 deploys the first such build, there is no earlier one to fall back to. The new
+service stays registered with `populator-temp` until step 6, so callers on `ecs-internal` are unaffected
+either way.

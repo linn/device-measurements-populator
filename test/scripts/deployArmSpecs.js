@@ -196,18 +196,24 @@ describe('deploy arms', () => {
             var result = deploy(['prod', '77']);
 
             expect(result.status).to.equal(0);
-            expect(fs.readFileSync(path.join(workDir, 'docker-calls.txt'), 'utf8')).to.include(
-                'linn/device-measurements-populator:77'
+            // Exactly, flag included: buildx 0.10 ignores a field-path format and prints a report instead.
+            expect(fs.readFileSync(path.join(workDir, 'docker-calls.txt'), 'utf8')).to.equal(
+                'buildx imagetools inspect linn/device-measurements-populator:77 --format {{json .Manifest}}\n'
             );
             expect(headObject(result)).to.deep.equal(['s3api', 'head-object', '--bucket', PROD_STORE, '--key', KEY]);
             expect(result.calls.indexOf(headObject(result))).to.be.below(result.calls.indexOf(result.deployArgs));
         });
 
-        it("keys a multi-platform image by the index's digest, not a child's", () => {
-            var result = deploy(['prod', '77'], { MANIFEST_JSON: INDEX_MANIFEST });
+        [
+            ['as buildx 0.10 prints it', INDEX_MANIFEST],
+            ['on a single line', INDEX_MANIFEST.replace(/\s+/g, '')],
+        ].forEach(([layout, manifest]) => {
+            it(`keys a multi-platform image by the index's digest, not a child's, ${layout}`, () => {
+                var result = deploy(['prod', '77'], { MANIFEST_JSON: manifest });
 
-            expect(result.status).to.equal(0);
-            expect(headObject(result)).to.include(KEY);
+                expect(result.status).to.equal(0);
+                expect(headObject(result)).to.include(KEY);
+            });
         });
 
         it('refuses to deploy when the store has no document for the image', () => {

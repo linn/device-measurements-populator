@@ -57,20 +57,20 @@ is_positive_integer "${TRAVIS_BUILD_NUMBER:-}" \
 # Decided immediately above its only consumer. Held apart from it, an added arm that forgot to set the
 # variable would default to the non-deploy path and publish silently.
 #
-# ENVIRONMENT is decided in the same place for the same reason, and exported for emit-service-sbom.sh,
-# which files each image's document in that environment's store. A master build's image is the only
+# SBOM_ENVIRONMENT is decided in the same place for the same reason. It is the store emit-service-sbom.sh
+# files each image's document in, and is handed to that call alone. A master build's image is the only
 # one prod is deployed from, so its document goes to prod's store at publication: prod is deployed by
 # hand, and the store keys an image by the digest this push fixes, so nothing the deploy adds is needed.
 case "${TRAVIS_PULL_REQUEST:-}" in
 	false)
 		DEPLOY_SYS=no
-		export ENVIRONMENT=prod
+		SBOM_ENVIRONMENT=prod
 		;;
 	*)
 		is_positive_integer "${TRAVIS_PULL_REQUEST:-}" \
 			|| { echo "TRAVIS_PULL_REQUEST is '${TRAVIS_PULL_REQUEST:-}' - neither 'false' nor a pull-request number, so refusing rather than guessing whether to deploy" >&2; exit 1; }
 		DEPLOY_SYS=yes
-		export ENVIRONMENT=sys
+		SBOM_ENVIRONMENT=sys
 		;;
 esac
 
@@ -79,7 +79,7 @@ esac
 # defaulted, and checked before the first push, so a publish never outruns its document.
 [ -n "${TRAVIS_DIST:-}" ] \
 	|| { echo "TRAVIS_DIST is not set - cannot record what built the artefact" >&2; exit 1; }
-export CI_BUILD_ENV="travis-dist:${TRAVIS_DIST}"
+CI_BUILD_ENV="travis-dist:${TRAVIS_DIST}"
 
 # The image is tagged by build number and nothing else. A tag derived from the branch name cannot be
 # formed for a branch containing '/', which docker rejects outright.
@@ -101,4 +101,5 @@ fi
 #
 # On a pull request Travis builds an ephemeral merge commit that ceases to exist once the branch merges,
 # so the pull request's own head is recorded instead - the one of the two that can still be dereferenced.
-./emit-service-sbom.sh "$TRAVIS_BUILD_NUMBER" "${TRAVIS_PULL_REQUEST_SHA:-$TRAVIS_COMMIT}"
+ENVIRONMENT="$SBOM_ENVIRONMENT" CI_BUILD_ENV="$CI_BUILD_ENV" \
+	./emit-service-sbom.sh "$TRAVIS_BUILD_NUMBER" "${TRAVIS_PULL_REQUEST_SHA:-$TRAVIS_COMMIT}"

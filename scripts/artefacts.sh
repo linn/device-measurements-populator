@@ -44,9 +44,6 @@ SERVICE_IMAGES=( [linn/device-measurements-populator]=.. )
 # The source repository these artefacts come from, as the bare repo name.
 SOURCE_REPO=device-measurements-populator
 
-# Inside the CRA product boundary. No device depends on the populator at runtime, but it runs on the
-# estate apps cluster, as a co-tenant of in-scope services, and that alone brings it in - see the
-# shared-compute rule in linn-api-development's docs/compliance/cra-cloud-position.md. No default
-# anywhere in the chain: a per-repository regulatory assertion must not be inherited from an answer
-# nobody gave.
+# In the CRA product boundary although no device depends on it at runtime: it runs on the estate apps
+# cluster beside in-scope services, and the estate's CRA position counts a co-tenant as in scope.
 SBOM_CRA_SCOPE=true

@@ -37,14 +37,16 @@ describe('CI arm selection', () => {
     // Appends its own name and arguments, so the assertions can be about ORDER as well as membership -
     // "deploy did not run" and "deploy ran before the push" are different defects.
     //
+    //
     // The SBOM emitter reads which store and what provenance from the environment rather than its
-    // arguments, so its line records those too.
+    // arguments, so its line records those too. Every other step records them only when they are set,
+    // which is never: they are scoped to the emit call, and a leak would change that step's line.
     function stubSubScript(name, exitCode) {
         var file = path.join(workDir, 'scripts', `${name}.sh`);
         var record =
             name === 'emit-service-sbom'
                 ? `echo "${name} $* ENVIRONMENT=\${ENVIRONMENT:-} CI_BUILD_ENV=\${CI_BUILD_ENV:-}" >> "${calls}"`
-                : `echo "${name} $*" >> "${calls}"`;
+                : `echo "${name} $*\${ENVIRONMENT:+ ENVIRONMENT=$ENVIRONMENT}\${CI_BUILD_ENV:+ CI_BUILD_ENV=$CI_BUILD_ENV}" >> "${calls}"`;
         fs.writeFileSync(file, ['#!/bin/bash', record, `exit ${exitCode}`, ''].join('\n'));
         fs.chmodSync(file, 0o755);
     }
@@ -198,19 +200,24 @@ describe('CI arm selection', () => {
             });
         });
 
-        ['', undefined].forEach((dist) => {
-            it(`refuses to publish with TRAVIS_DIST=${JSON.stringify(dist)}, which the SBOM records as provenance`, () => {
-                var env = onPullRequest({});
-                if (dist === undefined) {
-                    delete env.TRAVIS_DIST;
-                } else {
-                    env.TRAVIS_DIST = dist;
-                }
+        [
+            ['a pull request', onPullRequest],
+            ['a master build', (extra) => onMaster(Object.assign({ TRAVIS_PULL_REQUEST: 'false' }, extra))],
+        ].forEach(([arm, envFor]) => {
+            ['', undefined].forEach((dist) => {
+                it(`refuses to publish ${arm} with TRAVIS_DIST=${JSON.stringify(dist)}, which the SBOM records as provenance`, () => {
+                    var env = envFor({});
+                    if (dist === undefined) {
+                        delete env.TRAVIS_DIST;
+                    } else {
+                        env.TRAVIS_DIST = dist;
+                    }
 
-                var result = runCi(env);
+                    var result = runCi(env);
 
-                expect(result.status).to.equal(1);
-                expect(result.ran).to.deep.equal(['build', 'lint', 'test']);
+                    expect(result.status).to.equal(1);
+                    expect(result.ran).to.deep.equal(['build', 'lint', 'test']);
+                });
             });
         });
 
