@@ -37,6 +37,25 @@ bash scripts/deploy.sh prod <build-number> --review   # create the change set on
 The prod arm refuses to run if the stack it names does not exist, so it can never create a second prod
 service. Background: [issue #12](https://github.com/linn/device-measurements-populator/issues/12).
 
+### Every deployed image has an SBOM
+
+The populator runs on the estate apps cluster, so it is inside the CRA SBOM boundary. CI emits a
+CycloneDX SBOM for each image it publishes, using the estate emitter (`scripts/emit-service-sbom.sh`,
+pinned in `scripts/sbom-pin.sh`), and files it in the environment's store,
+`linn-api-infrastructure-<environment>-sbom-store`, keyed by the image's repo digest:
+
+- a pull-request build files its image's document in **sys**'s store, after deploying sys;
+- a `master` build files its image's document in **prod**'s store, straight after pushing it. Prod is
+  deployed by hand from that image, so its document already exists before any deploy. The digest is
+  fixed by the push, and the deploy adds nothing to the document.
+
+So a prod deploy has no SBOM step of its own. Instead, `deploy.sh prod` checks for one. It looks up the
+tag's digest in Docker Hub and **refuses to deploy unless prod's store holds a document for it**. That
+refuses a pull-request build's image, which is documented only in sys's store, and a `master` build
+whose emit failed after its push. The check also runs under `--review`. For it, the machine running the
+deploy needs `docker` with `buildx`, logged in to Docker Hub, and AWS credentials that can read prod's
+store.
+
 ### The first prod deploy is a cutover
 
 Prod's 2016 service runs on `production-cluster-v2` and is registered with a hand-built target group,
@@ -54,10 +73,11 @@ one as well. So the order is:
    - `populator-temp` must be in the same VPC as the estate cluster, and its health check must pass
      against the new image, or the new service never becomes stable.
 2. **Read the change set:** `bash scripts/deploy.sh prod <build-number> --review`, then check the change
-   set in the console. The ECS service should show `Replacement: True`. It is replaced, not updated,
+   set in the console. A refusal naming the SBOM store means the build is not one to deploy. The ECS service should show `Replacement: True`. It is replaced, not updated,
    because the template drops the custom service `Role` (a service with two target groups must use the
    service-linked role) and changes its cluster.
-3. **Deploy dual-homed:** `bash scripts/deploy.sh prod <build-number>`. CloudFormation creates the new
+3. **Deploy dual-homed:** `bash scripts/deploy.sh prod <build-number>`, where the build number is a
+   green `master` build's (see § *Every deployed image has an SBOM*). CloudFormation creates the new
    service and waits for it to be stable; the 2016 service keeps serving throughout and is deleted only in
    the stack's cleanup phase, after the whole update has succeeded. If the new service never stabilises
    the stack rolls back and the old one is untouched - but the template has no deployment circuit
@@ -71,5 +91,6 @@ one as well. So the order is:
    `bash scripts/smoke-test.sh --target prod-new --yes-write-to-prod`.
 
 After step 3 there is no way back to the 2016 service - its cleanup deletes it - so a problem found in
-steps 4 or 5 is fixed forward: redeploy an earlier `master` build number. The new service stays
+steps 4 or 5 is fixed forward: redeploy an earlier `master` build number. It must be one built after
+SBOM emission was added, since an older build has no document in prod's store and `deploy.sh` refuses it. The new service stays
 registered with `populator-temp` until step 6, so callers on `ecs-internal` are unaffected either way.
