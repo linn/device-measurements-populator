@@ -11,16 +11,45 @@ that go with them to S3. `device-measurements-api` reads back what this service 
 
 `scripts/smoke-test.sh` publishes a throwaway product descriptor and one device through this service,
 reads the measurements back through `device-measurements-api`, then removes both and proves they are
-gone. It writes nothing that outlives the run, and removes what it wrote even when a step fails.
+gone. It writes nothing that outlives the run, and removes what it wrote even when a step fails. The
+populator sits behind internal load balancers, so run it from inside the network (the VPN).
 
 ```
-bash scripts/smoke-test.sh --env sys \
-    --populator http://<this-service> --measurements http://<measurements-api>
+bash scripts/smoke-test.sh --target sys
 ```
 
-Both options are repeatable, which is how to check a service registered with more than one load
-balancer: pass every address and it reports the build each one is serving, runs a publish/read/remove
-cycle through each populator, and reads every cycle back through each measurements endpoint.
+`--target` names a known deployment: `sys`, `prod-new` (the app load balancer), `prod-old` (the
+`ecs-internal` load balancer) or `prod-dual` (both prod addresses, the check on a dual-homed deploy).
+Any prod target also requires `--yes-write-to-prod`. `--populator` and `--measurements` can be given
+instead, each repeatably, to point it somewhere else. `bash scripts/smoke-test.sh --help` prints the full
+contract.
 
-`--env prod` additionally requires `--yes-write-to-prod`, because the script cannot tell from a URL
-where it is pointed. `bash scripts/smoke-test.sh --help` prints the full contract.
+## Deploying
+
+sys is deployed by CI, from every pull request that targets `master`. Prod is deployed by hand, from the
+image a `master` build pushed (its tag is that build's Travis build number):
+
+```
+bash scripts/deploy.sh prod <build-number>
+```
+
+### The first prod deploy is a cutover
+
+Prod's 2016 service is registered with a hand-built target group, `populator-temp`, on the unmanaged
+`ecs-internal` load balancer, which its current callers reach. This template registers the service with
+`measurements-populator` on the app load balancer instead, and while `deploy.sh`'s prod arm names
+`populator-temp` as the legacy target group, with that one as well. So the order is:
+
+1. **Check the log group does not already exist.** The template creates `/ecs/deviceMeasurementPopulator`
+   and a deploy fails (and rolls back) if the name is taken:
+   `aws logs describe-log-groups --log-group-name-prefix /ecs/deviceMeasurementPopulator`
+2. **Deploy dual-homed:** `bash scripts/deploy.sh prod <build-number>`. This *replaces* the ECS service
+   rather than updating it, because the template drops the custom service `Role` (a service with two
+   target groups must use the service-linked role). CloudFormation creates the new service, waits for it
+   to be stable, and only then deletes the 2016 one; if the new service never stabilises the stack rolls
+   back and the old one is untouched. The new service's name is generated, so anything that looks the
+   service up by name must be updated.
+3. **Prove both addresses:** `bash scripts/smoke-test.sh --target prod-dual --yes-write-to-prod`.
+4. **Move every caller** off the `ecs-internal` address onto the app load balancer.
+5. **Drop the legacy target group:** set `LEGACY_TARGET_GROUP_ARN=none` in `deploy.sh`'s prod arm, merge,
+   redeploy, and check with `bash scripts/smoke-test.sh --target prod-new --yes-write-to-prod`.
