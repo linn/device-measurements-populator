@@ -82,6 +82,29 @@ esac
 if [ "$ENVIRONMENT" = prod ]; then
   aws cloudformation describe-stacks --stack-name "$STACK_NAME" >/dev/null \
     || { echo "deploy.sh: could not read prod stack $STACK_NAME (missing, or no access) - refusing to deploy, so a new one is never created" >&2; exit 1; }
+
+  # Every prod deploy ships a documented image. The master build that published the tag filed its SBOM in
+  # prod's store (scripts/ci.sh), keyed by the digest the registry holds for it, so this asks for that
+  # document by the same key. It refuses a pull-request build's image (documented in sys's store only)
+  # and a master build whose emit failed after its push. Checked under --review too, so a rehearsal
+  # reports what the real run would refuse.
+  #
+  # The key is the emitter's: components/image/<docker-repository>/<digest>.cdx.json, where the
+  # repository is the image name as docker records it in RepoDigests - for Docker Hub, with no host.
+  #
+  # `{{json .Manifest}}` rather than `{{.Manifest.Digest}}`: buildx 0.10 ignores the latter and prints its
+  # human-readable report instead. For a multi-platform index the index's own digest is printed first,
+  # and its children's after it. A failed lookup yields no digest line, which the case below refuses.
+  IMAGE=linn/device-measurements-populator
+  DIGEST=$(docker buildx imagetools inspect "$IMAGE:$DOCKER_TAG" --format '{{json .Manifest}}' \
+    | sed -n 's/.*"digest": *"\(sha256:[0-9a-f]\{64\}\)".*/\1/p' | head -n 1)
+  case "$DIGEST" in
+    sha256:*) ;;
+    *) echo "deploy.sh: could not resolve the digest of $IMAGE:$DOCKER_TAG (not pushed, or not logged in to Docker Hub)" >&2; exit 1 ;;
+  esac
+  SBOM_KEY="components/image/$IMAGE/$DIGEST.cdx.json"
+  aws s3api head-object --bucket linn-api-infrastructure-prod-sbom-store --key "$SBOM_KEY" >/dev/null \
+    || { echo "deploy.sh: prod's SBOM store has no document at $SBOM_KEY (or no access) - deploy only a master build whose CI run went green" >&2; exit 1; }
 fi
 
 if [ "$MODE" = --review ]; then

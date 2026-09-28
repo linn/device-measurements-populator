@@ -44,7 +44,9 @@ SERVICE_IMAGES=( [linn/device-measurements-populator]=.. )
 # The source repository these artefacts come from, as the bare repo name.
 SOURCE_REPO=device-measurements-populator
 
-# SBOM_CRA_SCOPE is deliberately absent: this repository runs no SBOM emitter. The populator is an
-# offline factory tool with no device depending on it at runtime, so it sits outside the CRA cloud SBOM
-# boundary and outside the emit-membership register. Wiring an emitter in later means adding the
-# assertion here - the emitter has no default and refuses without it, which is the intended behaviour.
+# Inside the CRA product boundary. No device depends on the populator at runtime, but it runs on the
+# estate apps cluster, as a co-tenant of in-scope services, and that alone brings it in - see the
+# shared-compute rule in linn-api-development's docs/compliance/cra-cloud-position.md. No default
+# anywhere in the chain: a per-repository regulatory assertion must not be inherited from an answer
+# nobody gave.
+SBOM_CRA_SCOPE=true
