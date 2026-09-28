@@ -167,6 +167,12 @@ describe('deploy arms', () => {
             var result = deploy(['prod', '77'], { DESCRIBE_EXIT: '255' });
 
             expect(result.status).to.equal(1);
+            expect(result.calls[0]).to.deep.equal([
+                'cloudformation',
+                'describe-stacks',
+                '--stack-name',
+                'deviceMeasurementPopulator',
+            ]);
             expect(result.deployArgs).to.equal(undefined);
         });
 
