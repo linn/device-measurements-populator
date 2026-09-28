@@ -1,14 +1,14 @@
-"use strict";
-var chai = require("chai");
+'use strict';
+var chai = require('chai');
 var sinon = require('sinon');
 var sinonChai = require('sinon-chai');
 /*jshint -W079 */
 var expect = chai.expect;
 chai.use(sinonChai);
 
-var mockery = require('mockery');
+var proxyquire = require('proxyquire');
 
-describe('Unpublishing Service', function () {
+describe('Unpublishing Service', () => {
     var sut,
         addDeviceCallbackArgs,
         removeDeviceCallbackArgs,
@@ -19,80 +19,100 @@ describe('Unpublishing Service', function () {
         saveDeviceCallbackArgs,
         loadDeviceCallbackArgs,
         deviceRepositoryStub;
-    beforeEach(function () {
+    beforeEach(() => {
         addDeviceCallbackArgs = [];
         removeDeviceCallbackArgs = [];
         addProductDescriptorCallbackArgs = [];
         removeProductDescriptorCallbackArgs = [];
 
         cloudDeviceManagerStub = {
-            add: sinon.spy(function addStub(productDescriptorId, serialNumber, updateCloudDeviceResource, callback) { callback.apply(null, addDeviceCallbackArgs); }),
-            remove: sinon.spy(function removeStub(productDescriptorId, serialNumber, callback) { callback.apply(null, removeDeviceCallbackArgs); })
+            add: sinon.spy(function addStub(productDescriptorId, serialNumber, updateCloudDeviceResource, callback) {
+                callback.apply(null, addDeviceCallbackArgs);
+            }),
+            remove: sinon.spy(function removeStub(productDescriptorId, serialNumber, callback) {
+                callback.apply(null, removeDeviceCallbackArgs);
+            }),
         };
 
         cloudProductDescriptorManagerStub = {
-            add: sinon.spy(function addStub(productDescriptorId, callback) { callback.apply(null, addProductDescriptorCallbackArgs); }),
-            remove: sinon.spy(function removeStub(productDescriptorId, callback) { callback.apply(null, removeProductDescriptorCallbackArgs); })
+            add: sinon.spy(function addStub(productDescriptorId, callback) {
+                callback.apply(null, addProductDescriptorCallbackArgs);
+            }),
+            remove: sinon.spy(function removeStub(productDescriptorId, callback) {
+                callback.apply(null, removeProductDescriptorCallbackArgs);
+            }),
         };
 
         loadDeviceCallbackArgs = [];
         saveDeviceCallbackArgs = [];
 
         deviceRepositoryStub = {
-            filterByProductDescriptorId: sinon.spy(function loadCloudProductDescriptorByIdFromStub(productDescriptorId, callback) { callback.apply(null, loadDeviceCallbackArgs); }),
-            findBy: sinon.spy(function loadCloudDeviceFromStub(productDescriptorId, serialNumber, callback) { callback.apply(null, loadDeviceCallbackArgs); }),
-            addOrReplace: sinon.spy(function saveCloudDeviceToStub(cloudDevice, callback) { callback.apply(null, saveDeviceCallbackArgs); }),
-            removeBy: sinon.spy(function deleteCloudDeviceFromStub(productDescriptorId, serialNumber, callback) { callback.apply(); })
+            filterByProductDescriptorId: sinon.spy(
+                function loadCloudProductDescriptorByIdFromStub(productDescriptorId, callback) {
+                    callback.apply(null, loadDeviceCallbackArgs);
+                }
+            ),
+            findBy: sinon.spy(function loadCloudDeviceFromStub(productDescriptorId, serialNumber, callback) {
+                callback.apply(null, loadDeviceCallbackArgs);
+            }),
+            addOrReplace: sinon.spy(function saveCloudDeviceToStub(cloudDevice, callback) {
+                callback.apply(null, saveDeviceCallbackArgs);
+            }),
+            removeBy: sinon.spy(function deleteCloudDeviceFromStub(productDescriptorId, serialNumber, callback) {
+                callback.apply();
+            }),
         };
 
-        mockery.enable({ useCleanCache: true });
-        mockery.registerMock('./cloudDeviceManager', cloudDeviceManagerStub);
-        mockery.registerMock('./cloudProductDescriptorManager', cloudProductDescriptorManagerStub);
-        mockery.registerMock('./repositories/cloudDeviceRepository', deviceRepositoryStub);
-        mockery.warnOnUnregistered(false);
+        // proxyquire replaces mockery, whose only published versions all carry a critical
+        // prototype-pollution advisory with no fix. noCallThru keeps the previous behaviour -
+        // the stub stands in wholly rather than falling through to the real module - and
+        // '@global' keeps the other half of it: mockery substituted a module everywhere in the
+        // require graph, where proxyquire alone only substitutes the direct require. These
+        // subjects reach their repositories transitively, so without it the real module loads.
+        proxyquire.noCallThru();
 
-        sut = require('../unpublishService');
+        sut = proxyquire('../unpublishService', {
+            './cloudDeviceManager': Object.assign(cloudDeviceManagerStub, { '@global': true }),
+            './cloudProductDescriptorManager': Object.assign(cloudProductDescriptorManagerStub, { '@global': true }),
+            './repositories/cloudDeviceRepository': Object.assign(deviceRepositoryStub, { '@global': true }),
+        });
     });
-    afterEach(function () {
-        mockery.deregisterAll();
-        mockery.disable();
-    });
-    describe('When deleting a product descriptor', function () {
+    describe('When deleting a product descriptor', () => {
         var result, productDescriptorId;
-        beforeEach(function (done) {
+        beforeEach((done) => {
             productDescriptorId = '25c1cf3c-7e53-490c-9020-62f580613ece';
-            sut.unpublish(productDescriptorId, function (err, data) {
+            sut.unpublish(productDescriptorId, (err, data) => {
                 result = data;
                 done();
             });
         });
-        it('should call product descriptor manager remove', function () {
+        it('should call product descriptor manager remove', () => {
             expect(cloudProductDescriptorManagerStub.remove).to.have.been.calledWith(productDescriptorId);
         });
-        it('should result in true', function () {
+        it('should result in true', () => {
             expect(result).to.be.true;
         });
     });
-    describe('When deleting a product descriptor which has existing devices', function () {
+    describe('When deleting a product descriptor which has existing devices', () => {
         var result, productDescriptorId, deviceSerialNumber;
-        beforeEach(function (done) {
+        beforeEach((done) => {
             productDescriptorId = '25c1cf3c-7e53-490c-9020-62f580613ece';
             deviceSerialNumber = '12345';
 
             loadDeviceCallbackArgs[1] = [require('./data/existingCloudDeviceResource.json')];
 
-            sut.unpublish(productDescriptorId, function (err, data) {
+            sut.unpublish(productDescriptorId, (err, data) => {
                 result = data;
                 done();
             });
         });
-        it('should call device manager remove', function () {
+        it('should call device manager remove', () => {
             expect(cloudDeviceManagerStub.remove).to.have.been.calledWith(productDescriptorId, deviceSerialNumber);
         });
-        it('should call product descriptor manager remove', function () {
+        it('should call product descriptor manager remove', () => {
             expect(cloudProductDescriptorManagerStub.remove).to.have.been.calledWith(productDescriptorId);
         });
-        it('should result in true', function () {
+        it('should result in true', () => {
             expect(result).to.be.true;
         });
     });

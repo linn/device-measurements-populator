@@ -1,23 +1,18 @@
-"use strict";
+'use strict';
+const config = require('../config');
+const Repository = require('./lib/dynamoRepository');
+const repository = new Repository(config.awsRegion, config.devicesTableName, 'productDescriptorId', 'serialNumber');
 
-let config = require('../config');
-let Repository = require('repository-dynamodb');
-let repository = new Repository(config.awsRegion, config.devicesTableName, 'productDescriptorId', 'serialNumber');
-
-repository.filterByProductDescriptorId = function loadCloudDevicesByProductDescriptorFromDynamoDb(productDescriptorId, callback) {
-    let params = {
-        TableName: config.devicesTableName,
-        KeyConditions : [
-            this.docClient.Condition("productDescriptorId", "EQ", productDescriptorId)
-        ]
-    };
-    this.docClient.query(params, function(err, results) {
-        if (err) {
-            callback(err);
-        } else {
-            callback(null, results.Items);
-        }
-    });
+repository.filterByProductDescriptorId = function loadCloudDevicesByProductDescriptorFromDynamoDb(
+    productDescriptorId,
+    callback
+) {
+    repository.queryByEquality(
+        {
+            equals: { productDescriptorId: productDescriptorId },
+        },
+        callback
+    );
 };
 
 module.exports = repository;
