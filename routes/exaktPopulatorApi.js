@@ -1,5 +1,4 @@
-"use strict";
-
+'use strict';
 var cloudProductDescriptorManager = require('../cloudProductDescriptorManager');
 var cloudDeviceManager = require('../cloudDeviceManager');
 var unpublishService = require('../unpublishService');
@@ -21,16 +20,16 @@ function parseProductDescriptorId(updateCloudProductDescriptorResource) {
 }
 
 function checkValidProductDescriptorRequest(req) {
-    return (req.params.productDescriptorId === parseProductDescriptorId(req.body));
+    return req.params.productDescriptorId === parseProductDescriptorId(req.body);
 }
 
 function checkValidDeviceRequest(req) {
-    return (checkValidProductDescriptorRequest(req) && !!req.body && (req.params.serialNumber === req.body.serialNumber));
+    return checkValidProductDescriptorRequest(req) && !!req.body && req.params.serialNumber === req.body.serialNumber;
 }
 
 module.exports.addDevice = function addDevice(req, res, next) {
-    if(checkValidDeviceRequest(req)) {
-        cloudDeviceManager.add(req.params.productDescriptorId, req.params.serialNumber, req.body, function (err, results) {
+    if (checkValidDeviceRequest(req)) {
+        cloudDeviceManager.add(req.params.productDescriptorId, req.params.serialNumber, req.body, (err, results) => {
             if (err) {
                 next(err);
             } else {
@@ -38,14 +37,14 @@ module.exports.addDevice = function addDevice(req, res, next) {
             }
         });
     } else {
-        var error = new Error("Not a valid request");
+        const error = new Error('Not a valid request');
         error.status = 400;
         next(error);
     }
 };
 
 module.exports.removeDevice = function removeDevice(req, res, next) {
-    cloudDeviceManager.remove(req.params.productDescriptorId, req.params.serialNumber, function(err) {
+    cloudDeviceManager.remove(req.params.productDescriptorId, req.params.serialNumber, (err) => {
         if (err) {
             next(err);
         } else {
@@ -56,7 +55,7 @@ module.exports.removeDevice = function removeDevice(req, res, next) {
 
 module.exports.addProductDescriptor = function addProductDescriptor(req, res, next) {
     if (checkValidProductDescriptorRequest(req)) {
-        cloudProductDescriptorManager.add(req.params.productDescriptorId, req.body, function (err, results) {
+        cloudProductDescriptorManager.add(req.params.productDescriptorId, req.body, (err, results) => {
             if (err) {
                 next(err);
             } else {
@@ -64,14 +63,14 @@ module.exports.addProductDescriptor = function addProductDescriptor(req, res, ne
             }
         });
     } else {
-        var error = new Error("Not a valid request");
+        const error = new Error('Not a valid request');
         error.status = 400;
         next(error);
     }
 };
 
 module.exports.removeProductDescriptor = function removeProductDescriptor(req, res, next) {
-    unpublishService.unpublish(req.params.productDescriptorId, function(err) {
+    unpublishService.unpublish(req.params.productDescriptorId, (err) => {
         if (err) {
             next(err);
         } else {

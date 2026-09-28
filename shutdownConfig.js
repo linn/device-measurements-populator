@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 // The timings the shared drain needs. They live here rather than in @linn-cloud/graceful-shutdown
 // because they are properties of THIS deployment: the drain has to finish inside the stop timeout
@@ -7,7 +7,7 @@
 
 // ECS escalates SIGTERM to SIGKILL when the task's StopTimeout expires, and a SIGKILL severs exactly
 // the requests the drain exists to protect. This plus EXIT_FLUSH_TIMEOUT_MS must stay under the
-// StopTimeout declared in ContinuousIntegration/CloudFormation.
+// StopTimeout declared in aws/deviceMeasurementsPopulatorCloudFormation.yaml.
 var DRAIN_TIMEOUT_MS = 20000;
 
 // How long to wait for the log streams before leaving anyway. process.exit() discards queued stdout,
@@ -20,7 +20,7 @@ var EXIT_FLUSH_TIMEOUT_MS = 2000;
 var KEEP_ALIVE_TIMEOUT_MS = 65000;
 
 module.exports = {
-  DRAIN_TIMEOUT_MS: DRAIN_TIMEOUT_MS,
-  EXIT_FLUSH_TIMEOUT_MS: EXIT_FLUSH_TIMEOUT_MS,
-  KEEP_ALIVE_TIMEOUT_MS: KEEP_ALIVE_TIMEOUT_MS,
+    DRAIN_TIMEOUT_MS: DRAIN_TIMEOUT_MS,
+    EXIT_FLUSH_TIMEOUT_MS: EXIT_FLUSH_TIMEOUT_MS,
+    KEEP_ALIVE_TIMEOUT_MS: KEEP_ALIVE_TIMEOUT_MS,
 };

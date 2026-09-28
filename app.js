@@ -1,7 +1,6 @@
-"use strict";
-
+'use strict';
 var express = require('express');
-var path = require('path');
+var path = require('node:path');
 var requestLogger = require('morgan');
 
 var log = require('./logger');
@@ -29,14 +28,14 @@ app.delete('/cloud-product-descriptors/:productDescriptorId', exaktPopulatorApi.
 app.get('/ping', pingApi.ping);
 
 // catch 404 and forward to error handler
-app.use(function(req, res, next) {
+app.use((_req, _res, next) => {
     var err = new Error('Not Found');
     err.status = 404;
     next(err);
 });
 
 // error handler
-app.use(function(err, req, res, next) {
+app.use((err, req, res, _next) => {
     if (!err.status || err.status >= 500) {
         log.error(err);
     }
@@ -44,12 +43,12 @@ app.use(function(err, req, res, next) {
     if (!req.accepts('html')) {
         res.json({
             message: err.message,
-            error: config.stackTraceOnError ? err : {}
+            error: config.stackTraceOnError ? err : {},
         });
     } else {
         res.render('error', {
             message: err.message,
-            error: config.stackTraceOnError ? err : {}
+            error: config.stackTraceOnError ? err : {},
         });
     }
 });
