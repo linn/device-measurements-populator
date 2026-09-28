@@ -10,15 +10,13 @@ cd "${0%/*}" # ensure cwd is script dir
 
 cd ../aws
 
-if [ $# -gt 3 ]; then
-  echo "deploy.sh: too many arguments - usage: deploy.sh <sys|prod> <build-number> [--review]" >&2
+if [ $# -gt 2 ]; then
+  echo "deploy.sh: too many arguments - usage: deploy.sh <sys|prod> <build-number>" >&2
   exit 64
 fi
 
 ENVIRONMENT="${1:?environment required (sys or prod)}"
 DOCKER_TAG="${2:?docker tag required}"
-# --review creates the change set and stops, so what a deploy would replace can be read before it runs.
-MODE="${3:-}"
 
 case "$DOCKER_TAG" in
   ''|*[!0-9]*|0*)
@@ -26,16 +24,9 @@ case "$DOCKER_TAG" in
     exit 64
     ;;
 esac
-case "$MODE" in
-  ''|--review) ;;
-  *)
-    echo "deploy.sh: unknown option '$MODE' (only --review)" >&2
-    exit 64
-    ;;
-esac
 
-# CI deploys sys only (scripts/ci.sh); prod is run by hand. Prod is not a like-for-like release of sys:
-# its first deploy of this template is a cutover, and the order it has to go in is in README.md
+# scripts/ci.sh calls this with sys from a pull-request build and with prod from a master build. Prod's
+# first deploy of this template moves the service onto the estate cluster; README.md has what that does
 # (background: https://github.com/linn/device-measurements-populator/issues/12).
 #
 # CLUSTER is the NAME of the SSM parameter holding the cluster name - the template's targetCluster is
@@ -69,8 +60,8 @@ case "$ENVIRONMENT" in
     DEVICE_FILE_DATA_BUCKET=linn.cloud.filedata
     TARGET_GROUP_ARN_EXPORT=measurements-populator-target-group-arn
     # Dual-homed until every caller has moved off ecs-internal: this is the hand-built target group the
-    # 2016 service is registered with, which those callers reach. Set it to none only as the last step
-    # of the cutover.
+    # 2016 service is registered with, which those callers reach. Set it to none, in its own pull
+    # request, once nothing uses that address.
     LEGACY_TARGET_GROUP_ARN=arn:aws:elasticloadbalancing:eu-west-1:545349016803:targetgroup/populator-temp/5426317c060e0e14
     ;;
   *)
@@ -82,48 +73,15 @@ esac
 if [ "$ENVIRONMENT" = prod ]; then
   aws cloudformation describe-stacks --stack-name "$STACK_NAME" >/dev/null \
     || { echo "deploy.sh: could not read prod stack $STACK_NAME (missing, or no access) - refusing to deploy, so a new one is never created" >&2; exit 1; }
-
-  # Every prod deploy ships a documented image. The master build that published the tag filed its SBOM in
-  # prod's store (scripts/ci.sh), keyed by the digest the registry holds for it, so this asks for that
-  # document by the same key. It refuses a pull-request build's image (documented in sys's store only)
-  # and a master build whose emit failed after its push. Checked under --review too, so a rehearsal
-  # reports what the real run would refuse.
-  #
-  # The key is the emitter's: components/image/<docker-repository>/<digest>.cdx.json, where the
-  # repository is the image name as docker records it in RepoDigests - for Docker Hub, with no host.
-  #
-  # `{{json .Manifest}}` rather than `{{.Manifest.Digest}}`: buildx 0.10 ignores the latter and prints its
-  # human-readable report instead. For a multi-platform index the index's own digest comes first and its
-  # children's after it. The JSON is split on its punctuation so each field is a line of its own however
-  # it is formatted - on one line, a greedy match would take the LAST digest, a child's. A failed lookup
-  # yields no digest line, which the case below refuses.
-  IMAGE=linn/device-measurements-populator
-  DIGEST=$(docker buildx imagetools inspect "$IMAGE:$DOCKER_TAG" --format '{{json .Manifest}}' \
-    | tr ',{}[]' '\n' \
-    | sed -n 's/^ *"digest": *"\(sha256:[0-9a-f]\{64\}\)" *$/\1/p' | head -n 1)
-  case "$DIGEST" in
-    sha256:*) ;;
-    *) echo "deploy.sh: could not resolve the digest of $IMAGE:$DOCKER_TAG - the tag may not be pushed, docker buildx may be missing, or the registry unreachable" >&2; exit 1 ;;
-  esac
-  SBOM_KEY="components/image/$IMAGE/$DIGEST.cdx.json"
-  aws s3api head-object --bucket linn-api-infrastructure-prod-sbom-store --key "$SBOM_KEY" >/dev/null \
-    || { echo "deploy.sh: no SBOM for this image at s3://linn-api-infrastructure-prod-sbom-store/$SBOM_KEY - either it was never filed (deploy only a master build whose CI run went green) or these credentials cannot read the store" >&2; exit 1; }
 fi
 
-if [ "$MODE" = --review ]; then
-  EXECUTE=--no-execute-changeset
-  echo "Creating a change set for $STACK_NAME (image tag $DOCKER_TAG), NOT executing it..."
-else
-  EXECUTE=
-  echo "Deploying $STACK_NAME (image tag $DOCKER_TAG)..."
-fi
+echo "Deploying $STACK_NAME (image tag $DOCKER_TAG)..."
 
 aws cloudformation deploy \
   --stack-name="$STACK_NAME" \
   --template-file=./deviceMeasurementsPopulatorCloudFormation.yaml \
   --capabilities=CAPABILITY_IAM \
   --no-fail-on-empty-changeset \
-  ${EXECUTE:+"$EXECUTE"} \
   --parameter-overrides \
       dockerTag="$DOCKER_TAG" \
       targetCluster="$CLUSTER" \

@@ -52,25 +52,16 @@ is_positive_integer "${TRAVIS_BUILD_NUMBER:-}" \
 	|| { echo "TRAVIS_BUILD_NUMBER is '${TRAVIS_BUILD_NUMBER:-}' - it is the image tag, and a build cannot publish one it cannot name" >&2; exit 1; }
 
 # A pull-request build reports the branch it TARGETS, not the branch it comes from, so a pull request
-# into the default branch is what identifies "about to be merged" - and that is what gets sys.
-#
-# Decided immediately above its only consumer. Held apart from it, an added arm that forgot to set the
-# variable would default to the non-deploy path and publish silently.
-#
-# SBOM_ENVIRONMENT is decided in the same place for the same reason. It is the store emit-service-sbom.sh
-# files each image's document in, and is handed to that call alone. A master build's image is the only
-# one prod is deployed from, so its document goes to prod's store at publication: prod is deployed by
-# hand, and the store keys an image by the digest this push fixes, so nothing the deploy adds is needed.
+# into the default branch is what identifies "about to be merged" - and that gets sys. A master build
+# (a merge) gets prod. Each files its image's SBOM in the store of the environment it deployed.
 case "${TRAVIS_PULL_REQUEST:-}" in
 	false)
-		DEPLOY_SYS=no
-		SBOM_ENVIRONMENT=prod
+		DEPLOY_ENVIRONMENT=prod
 		;;
 	*)
 		is_positive_integer "${TRAVIS_PULL_REQUEST:-}" \
 			|| { echo "TRAVIS_PULL_REQUEST is '${TRAVIS_PULL_REQUEST:-}' - neither 'false' nor a pull-request number, so refusing rather than guessing whether to deploy" >&2; exit 1; }
-		DEPLOY_SYS=yes
-		SBOM_ENVIRONMENT=sys
+		DEPLOY_ENVIRONMENT=sys
 		;;
 esac
 
@@ -86,20 +77,13 @@ CI_BUILD_ENV="travis-dist:${TRAVIS_DIST}"
 ./build-dockers.sh
 ./push-dockers.sh
 
-if [ "$DEPLOY_SYS" = yes ]; then
-	echo "PR BUILD - deploying sys"
-	./deploy.sh sys "$TRAVIS_BUILD_NUMBER"
-else
-	# Prod is deployed by hand: its target-group arrangement differs from sys, so a prod deploy is a
-	# cutover rather than a like-for-like release. deploy.sh refuses a prod image with no document in
-	# prod's store, which is what makes the emit below a precondition of shipping rather than a hope.
-	echo "MASTER BUILD - image published; prod is deployed by hand"
-fi
+echo "Deploying $DEPLOY_ENVIRONMENT"
+./deploy.sh "$DEPLOY_ENVIRONMENT" "$TRAVIS_BUILD_NUMBER"
 
-# Last, so a failure to document the artefact cannot hold up shipping it to sys - but still under set -e,
+# Last, so a failure to document the artefact cannot hold up shipping it - but still under set -e,
 # because an evidence store with silent gaps is worse than a red build.
 #
 # On a pull request Travis builds an ephemeral merge commit that ceases to exist once the branch merges,
 # so the pull request's own head is recorded instead - the one of the two that can still be dereferenced.
-ENVIRONMENT="$SBOM_ENVIRONMENT" CI_BUILD_ENV="$CI_BUILD_ENV" \
+ENVIRONMENT="$DEPLOY_ENVIRONMENT" CI_BUILD_ENV="$CI_BUILD_ENV" \
 	./emit-service-sbom.sh "$TRAVIS_BUILD_NUMBER" "${TRAVIS_PULL_REQUEST_SHA:-$TRAVIS_COMMIT}"

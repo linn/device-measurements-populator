@@ -125,9 +125,7 @@ describe('CI arm selection', () => {
     });
 
     describe('a master build', () => {
-        // Prod's document is filed here, at publication, because prod is deployed by hand from this image
-        // and deploy.sh refuses one that prod's store has no document for.
-        it("publishes an image and documents it in prod's store, and does not deploy", () => {
+        it("deploys prod after the push, then documents the image in prod's store", () => {
             var result = runCi(onMaster({ TRAVIS_PULL_REQUEST: 'false' }));
 
             expect(result.status).to.equal(0);
@@ -137,6 +135,7 @@ describe('CI arm selection', () => {
                 'test',
                 'build-dockers',
                 'push-dockers',
+                'deploy prod 77',
                 `emit-service-sbom 77 ${PUSH_SHA} ENVIRONMENT=prod CI_BUILD_ENV=travis-dist:noble`,
             ]);
         });
@@ -284,6 +283,15 @@ describe('CI arm selection', () => {
 
             expect(result.status).to.equal(5);
             expect(result.ran).to.not.include('deploy sys 77');
+        });
+
+        it('does not document an image the prod deploy failed to ship', () => {
+            stubSubScript('deploy', 6);
+
+            var result = runCi(onMaster({ TRAVIS_PULL_REQUEST: 'false' }));
+
+            expect(result.status).to.equal(6);
+            expect(result.ran[result.ran.length - 1]).to.equal('deploy prod 77');
         });
 
         it('does not document an image the sys deploy failed to ship', () => {

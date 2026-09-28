@@ -16,35 +16,11 @@ var execFileSync = require('node:child_process').execFileSync;
 // export list), and a wrong one is not caught by anything else here: a different stack name would create
 // a second service, and a missing legacy target group drops the callers still on ecs-internal.
 //
-// `docker` is replaced the same way, answering the registry lookup the prod arm makes for the image's
-// digest.
-//
 // PRECONDITION: bash on PATH. Nothing else - no docker, no network, no AWS.
 describe('deploy arms', () => {
     var workDir, calls;
 
     var LEGACY_ARN = 'arn:aws:elasticloadbalancing:eu-west-1:545349016803:targetgroup/populator-temp/5426317c060e0e14';
-
-    var DIGEST = `sha256:${'c'.repeat(64)}`;
-    var CHILD_DIGEST = `sha256:${'d'.repeat(64)}`;
-    // What `docker buildx imagetools inspect --format '{{json .Manifest}}'` prints for a single image.
-    var SINGLE_MANIFEST = [
-        '{',
-        '  "mediaType": "application/vnd.docker.distribution.manifest.v2+json",',
-        `  "digest": "${DIGEST}",`,
-        '  "size": 2209',
-        '}',
-    ].join('\n');
-    // And for a multi-platform index, as buildx 0.10 prints it: the index's digest, then its children's.
-    var INDEX_MANIFEST = [
-        '{',
-        '  "mediaType": "application/vnd.oci.image.index.v1+json",',
-        `  "digest": "${DIGEST}",`,
-        '  "manifests": [',
-        `    { "mediaType": "application/vnd.oci.image.manifest.v1+json", "digest": "${CHILD_DIGEST}" }`,
-        '  ]',
-        '}',
-    ].join('\n');
 
     beforeEach(() => {
         workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deploy-arm-'));
@@ -58,8 +34,7 @@ describe('deploy arms', () => {
         calls = path.join(workDir, 'calls.txt');
         // Each call is recorded as a marker line then one argument per line, so a value containing '=' or
         // ':' is compared whole and each call's arguments stay separate. describe-stacks answers with
-        // DESCRIBE_EXIT, which is how a missing stack is simulated, and head-object with HEAD_EXIT, which
-        // is how a missing SBOM document is.
+        // DESCRIBE_EXIT, which is how a missing stack is simulated.
         var stub = path.join(workDir, 'bin', 'aws');
         fs.writeFileSync(
             stub,
@@ -67,25 +42,11 @@ describe('deploy arms', () => {
                 '#!/bin/bash',
                 `{ echo '--call--'; printf '%s\\n' "$@"; } >> "${calls}"`,
                 '[ "$2" = describe-stacks ] && exit "${DESCRIBE_EXIT:-0}"',
-                '[ "$2" = head-object ] && exit "${HEAD_EXIT:-0}"',
                 'exit 0',
                 '',
             ].join('\n')
         );
         fs.chmodSync(stub, 0o755);
-        // Prints MANIFEST_JSON for the tag it is asked about, and records that tag.
-        var dockerStub = path.join(workDir, 'bin', 'docker');
-        fs.writeFileSync(
-            dockerStub,
-            [
-                '#!/bin/bash',
-                `printf '%s\\n' "$*" >> "${path.join(workDir, 'docker-calls.txt')}"`,
-                '[ "${DOCKER_EXIT:-0}" = 0 ] || { echo "docker: lookup failed" >&2; exit "$DOCKER_EXIT"; }',
-                'printf \'%s\\n\' "$MANIFEST_JSON"',
-                '',
-            ].join('\n')
-        );
-        fs.chmodSync(dockerStub, 0o755);
     });
 
     afterEach(() => {
@@ -101,7 +62,6 @@ describe('deploy arms', () => {
                     {
                         PATH: `${path.join(workDir, 'bin')}:${process.env.PATH}`,
                         HOME: process.env.HOME,
-                        MANIFEST_JSON: SINGLE_MANIFEST,
                     },
                     extraEnv
                 ),
@@ -175,80 +135,6 @@ describe('deploy arms', () => {
             ]);
             expect(result.deployArgs).to.equal(undefined);
         });
-
-        it('with --review creates the change set without executing it', () => {
-            var result = deploy(['prod', '77', '--review']);
-
-            expect(result.status).to.equal(0);
-            expect(result.deployArgs).to.include('--no-execute-changeset');
-        });
-
-        it('executes the change set without --review', () => {
-            var result = deploy(['prod', '77']);
-
-            expect(result.deployArgs).to.not.include('--no-execute-changeset');
-        });
-    });
-
-    describe("prod ships only an image with an SBOM in prod's store", () => {
-        var PROD_STORE = 'linn-api-infrastructure-prod-sbom-store';
-        var KEY = `components/image/linn/device-measurements-populator/${DIGEST}.cdx.json`;
-
-        function headObject(result) {
-            return result.calls.find((call) => call[0] === 's3api' && call[1] === 'head-object');
-        }
-
-        it('asks for the document keyed by the digest of the tag it deploys, before deploying', () => {
-            var result = deploy(['prod', '77']);
-
-            expect(result.status).to.equal(0);
-            // Exactly, flag included: buildx 0.10 ignores a field-path format and prints a report instead.
-            expect(fs.readFileSync(path.join(workDir, 'docker-calls.txt'), 'utf8')).to.equal(
-                'buildx imagetools inspect linn/device-measurements-populator:77 --format {{json .Manifest}}\n'
-            );
-            expect(headObject(result)).to.deep.equal(['s3api', 'head-object', '--bucket', PROD_STORE, '--key', KEY]);
-            expect(result.calls.indexOf(headObject(result))).to.be.below(result.calls.indexOf(result.deployArgs));
-        });
-
-        [
-            ['as buildx 0.10 prints it', INDEX_MANIFEST],
-            ['on a single line', INDEX_MANIFEST.replace(/\s+/g, '')],
-        ].forEach(([layout, manifest]) => {
-            it(`keys a multi-platform image by the index's digest, not a child's, ${layout}`, () => {
-                var result = deploy(['prod', '77'], { MANIFEST_JSON: manifest });
-
-                expect(result.status).to.equal(0);
-                expect(headObject(result)).to.include(KEY);
-            });
-        });
-
-        it('refuses to deploy when the store has no document for the image', () => {
-            var result = deploy(['prod', '77'], { HEAD_EXIT: '254' });
-
-            expect(result.status).to.equal(1);
-            expect(result.deployArgs).to.equal(undefined);
-        });
-
-        it('refuses under --review too, so a rehearsal reports what the real run would refuse', () => {
-            var result = deploy(['prod', '77', '--review'], { HEAD_EXIT: '254' });
-
-            expect(result.status).to.equal(1);
-            expect(result.deployArgs).to.equal(undefined);
-        });
-
-        [
-            ['the registry lookup fails', { DOCKER_EXIT: '1' }],
-            ['the lookup prints no digest', { MANIFEST_JSON: '{ "mediaType": "x" }' }],
-            ['the digest is truncated', { MANIFEST_JSON: `"digest": "sha256:${'c'.repeat(63)}"` }],
-        ].forEach(([what, env]) => {
-            it(`refuses to deploy, without asking the store, when ${what}`, () => {
-                var result = deploy(['prod', '77'], env);
-
-                expect(result.status).to.equal(1);
-                expect(headObject(result)).to.equal(undefined);
-                expect(result.deployArgs).to.equal(undefined);
-            });
-        });
     });
 
     describe('sys', () => {
@@ -282,8 +168,7 @@ describe('deploy arms', () => {
             ['any other environment', ['int', '77']],
             ['a tag that is not a build number', ['prod', 'latest']],
             ['a zero-padded tag', ['prod', '077']],
-            ['an unknown option', ['prod', '77', '--yes']],
-            ['an argument after the option', ['prod', '77', '--review', 'typo']],
+            ['an extra argument', ['prod', '77', '--yes']],
         ].forEach(([what, args]) => {
             it(`refuses ${what}`, () => {
                 var result = deploy(args);

@@ -26,76 +26,54 @@ contract.
 
 ## Deploying
 
-sys is deployed by CI, from every pull request that targets `master`. Prod is deployed by hand, from the
-image a `master` build pushed (its tag is that build's Travis build number):
+CI deploys every environment; nothing is deployed by hand.
 
-```
-bash scripts/deploy.sh prod <build-number>            # deploy
-bash scripts/deploy.sh prod <build-number> --review   # create the change set only, for reading first
-```
+- A pull request that targets `master` deploys **sys**.
+- A `master` build (a merge) deploys **prod**.
+- A build of any other branch deploys nothing.
 
-The prod arm refuses to run if the stack it names does not exist, so it can never create a second prod
-service. Background: [issue #12](https://github.com/linn/device-measurements-populator/issues/12).
+Each deploying build then files a CycloneDX SBOM for the image it shipped in that environment's store
+(`linn-api-infrastructure-{sys,prod}-sbom-store`), through `scripts/emit-service-sbom.sh`, the same
+emitter as the rest of the estate. The populator is in CRA scope because it runs on the apps cluster.
 
-### Every deployed image has an SBOM
+`deploy.sh` refuses to create a prod stack: prod always updates the existing one,
+`deviceMeasurementPopulator`, so a deploy can never leave a second prod service beside it.
 
-The populator runs on the estate apps cluster, so it is inside the CRA SBOM boundary. CI emits a
-CycloneDX SBOM for each image it publishes, using the estate emitter (`scripts/emit-service-sbom.sh`,
-pinned in `scripts/sbom-pin.sh`), and files it in the environment's store,
-`linn-api-infrastructure-<environment>-sbom-store`, keyed by the image's repo digest:
+### The first prod deploy moves the service onto the apps cluster
 
-- a pull-request build files its image's document in **sys**'s store, after deploying sys;
-- a `master` build files its image's document in **prod**'s store, straight after pushing it. Prod is
-  deployed by hand from that image, so its document already exists before any deploy. The digest is
-  fixed by the push, and the deploy adds nothing to the document.
+The prod service created in 2016 runs on IT's `production-cluster-v2` and is registered with a
+hand-built target group, `populator-temp`, on the unmanaged `ecs-internal` load balancer, which its
+current callers reach. The first `master` build of this template moves it:
 
-So a prod deploy has no SBOM step of its own. Instead, `deploy.sh prod` checks for one. It looks up the
-tag's digest in Docker Hub and **refuses to deploy unless prod's store holds a document for it**. That
-refuses a pull-request build's image, which is documented only in sys's store, and a `master` build
-whose emit failed after its push. The check also runs under `--review`. For it, the machine running the
-deploy needs `docker` with the `buildx` plugin, and AWS credentials that can read prod's store.
+- It updates the **same** stack. The ECS service is **replaced**, not duplicated: the template drops
+  the custom service `Role` (a service with two target groups must use the service-linked role) and
+  changes its cluster, and neither can change in place. CloudFormation creates the new service on the
+  apps cluster (`LinnApiClusterName-prod`, the SSM parameter linn-api-infrastructure publishes), waits
+  for it to be stable, and deletes the 2016 service in the stack's cleanup phase, after the whole update
+  has succeeded. Its generated name differs from the old one's.
+- The new service is **dual-homed**: registered with `measurements-populator` on the app load balancer
+  *and* with `populator-temp`, so requests through `ecs-internal` keep being served, during the move and
+  after it. For the few minutes both services run, `populator-temp` routes to either; they share the same
+  tables and bucket.
+- If the new service never stabilises, the stack rolls back and the 2016 service is untouched. The
+  template has no deployment circuit breaker, so that wait can run for hours.
 
-### The first prod deploy is a cutover
+Before merging the pull request that makes this first prod deploy, check, since a failure here only
+shows up at deploy time:
 
-Prod's 2016 service runs on `production-cluster-v2` and is registered with a hand-built target group,
-`populator-temp`, on the unmanaged `ecs-internal` load balancer, which its current callers reach. This
-template runs the service on the estate cluster (`LinnApiClusterName-prod`, the SSM parameter
-linn-api-infrastructure publishes) and registers it with `measurements-populator` on the app load
-balancer - and, while `deploy.sh`'s prod arm names `populator-temp` as the legacy target group, with that
-one as well. So the order is:
+- `LinnApiClusterName-prod` resolves to the apps cluster.
+- `populator-temp` is in the same VPC as that cluster, and its health check passes against the new
+  image.
+- The log group `/ecs/deviceMeasurementPopulator` does not exist yet (the template creates it, and a
+  deploy fails if the name is taken). This must print nothing:
+  `aws logs describe-log-groups --log-group-name-prefix /ecs/deviceMeasurementPopulator --query "logGroups[?logGroupName=='/ecs/deviceMeasurementPopulator'].logGroupName" --output text`
+- The CI user can deploy prod: CloudFormation on the 2016 stack, IAM for the task role, ECS on both
+  clusters, logs, and registering with `populator-temp`. Only the first `master` build proves it.
 
-1. **Preconditions.**
-   - The log group must not exist yet, because the template creates it (and a deploy fails and rolls
-     back if the name is taken). This must print nothing:
-     `aws logs describe-log-groups --log-group-name-prefix /ecs/deviceMeasurementPopulator --query "logGroups[?logGroupName=='/ecs/deviceMeasurementPopulator'].logGroupName" --output text`
-     If it prints the name, stop: the group has to be imported into the stack or removed first.
-   - `populator-temp` must be in the same VPC as the estate cluster, and its health check must pass
-     against the new image, or the new service never becomes stable.
-2. **Read the change set:** `bash scripts/deploy.sh prod <build-number> --review`, then check the change
-   set in the console. The ECS service should show `Replacement: True`. It is replaced, not updated,
-   because the template drops the custom service `Role` (a service with two target groups must use the
-   service-linked role) and changes its cluster.
+### Dropping `populator-temp`
 
-   If the run refuses for want of an SBOM, either that build is not one to deploy or your credentials
-   cannot read prod's store; the message names the key it looked for (§ *Every deployed image has an
-   SBOM*).
-3. **Deploy dual-homed:** `bash scripts/deploy.sh prod <build-number>`, where the build number is a
-   green `master` build's (see § *Every deployed image has an SBOM*). CloudFormation creates the new
-   service and waits for it to be stable; the 2016 service keeps serving throughout and is deleted only in
-   the stack's cleanup phase, after the whole update has succeeded. If the new service never stabilises
-   the stack rolls back and the old one is untouched - but the template has no deployment circuit
-   breaker, so that wait can run for hours; `aws cloudformation cancel-update-stack` ends it sooner. The
-   new service's name is generated, so anything that looks the service up by name must be updated.
-4. **Prove both addresses:** `bash scripts/smoke-test.sh --target prod-dual --yes-write-to-prod`.
-5. **Move every caller** off the `ecs-internal` address onto the app load balancer, and confirm
-   `populator-temp` has stopped receiving requests before the next step.
-6. **Drop the legacy target group:** set `LEGACY_TARGET_GROUP_ARN=none` in `deploy.sh`'s prod arm (and the
-   matching assertion in `test/scripts/deployArmSpecs.js`), merge, redeploy, and check with
-   `bash scripts/smoke-test.sh --target prod-new --yes-write-to-prod`.
-
-After step 3 there is no way back to the 2016 service - its cleanup deletes it - so a problem found in
-steps 4 or 5 is fixed forward: redeploy an earlier `master` build number. It must be one built after
-SBOM emission was added, since an older build has no document in prod's store and `deploy.sh` refuses
-it - so if step 3 deploys the first such build, there is no earlier one to fall back to. The new
-service stays registered with `populator-temp` until step 6, so callers on `ecs-internal` are unaffected
-either way.
+Once no caller uses the `ecs-internal` address, a pull request sets `LEGACY_TARGET_GROUP_ARN=none` in
+`deploy.sh`'s prod arm (and the matching assertion in `test/scripts/deployArmSpecs.js`). Its merge
+redeploys prod registered with `measurements-populator` alone. Check afterwards with
+`bash scripts/smoke-test.sh --target prod-new --yes-write-to-prod`; before then, `--target prod-dual`
+checks both addresses.
