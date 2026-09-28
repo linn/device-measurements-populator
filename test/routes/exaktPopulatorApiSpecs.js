@@ -1,7 +1,8 @@
 'use strict';
 var chai = require('chai');
 var sinon = require('sinon');
-var sinonChai = require('sinon-chai');
+// sinon-chai 4 is ESM-only: require() of it returns the module namespace, so the plugin is its default export.
+var sinonChai = require('sinon-chai').default;
 var proxyquire = require('proxyquire');
 
 // This spec is self-sufficient: 12factor-config reads these at require time and exits if one is
