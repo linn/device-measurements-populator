@@ -18,7 +18,7 @@ var execFileSync = require('node:child_process').execFileSync;
 describe('CI arm selection', () => {
     var workDir, calls;
 
-    var SUB_SCRIPTS = ['build', 'lint', 'test', 'build-dockers', 'push-dockers', 'deploy'];
+    var SUB_SCRIPTS = ['build', 'lint', 'test', 'build-dockers', 'push-dockers', 'deploy', 'emit-service-sbom'];
 
     beforeEach(() => {
         workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-arm-'));
@@ -36,9 +36,18 @@ describe('CI arm selection', () => {
 
     // Appends its own name and arguments, so the assertions can be about ORDER as well as membership -
     // "deploy did not run" and "deploy ran before the push" are different defects.
+    //
+    //
+    // The SBOM emitter reads which store and what provenance from the environment rather than its
+    // arguments, so its line records those too. Every other step records them only when they are set,
+    // which is never: they are scoped to the emit call, and a leak would change that step's line.
     function stubSubScript(name, exitCode) {
         var file = path.join(workDir, 'scripts', `${name}.sh`);
-        fs.writeFileSync(file, ['#!/bin/bash', `echo "${name} $*" >> "${calls}"`, `exit ${exitCode}`, ''].join('\n'));
+        var record =
+            name === 'emit-service-sbom'
+                ? `echo "${name} $* ENVIRONMENT=\${ENVIRONMENT:-} CI_BUILD_ENV=\${CI_BUILD_ENV:-}" >> "${calls}"`
+                : `echo "${name} $*\${ENVIRONMENT:+ ENVIRONMENT=$ENVIRONMENT}\${CI_BUILD_ENV:+ CI_BUILD_ENV=$CI_BUILD_ENV}" >> "${calls}"`;
+        fs.writeFileSync(file, ['#!/bin/bash', record, `exit ${exitCode}`, ''].join('\n'));
         fs.chmodSync(file, 0o755);
     }
 
@@ -67,8 +76,18 @@ describe('CI arm selection', () => {
         };
     }
 
+    var PUSH_SHA = 'a'.repeat(40);
+    var PR_HEAD_SHA = 'b'.repeat(40);
+
     function onMaster(extra) {
-        return Object.assign({ TRAVIS_BRANCH: 'master', TRAVIS_BUILD_NUMBER: '77' }, extra);
+        return Object.assign(
+            { TRAVIS_BRANCH: 'master', TRAVIS_BUILD_NUMBER: '77', TRAVIS_DIST: 'noble', TRAVIS_COMMIT: PUSH_SHA },
+            extra
+        );
+    }
+
+    function onPullRequest(extra) {
+        return onMaster(Object.assign({ TRAVIS_PULL_REQUEST: '10', TRAVIS_PULL_REQUEST_SHA: PR_HEAD_SHA }, extra));
     }
 
     describe('a branch build', () => {
@@ -106,15 +125,23 @@ describe('CI arm selection', () => {
     });
 
     describe('a master build', () => {
-        it('publishes an image and does not deploy, because prod is deployed by hand', () => {
+        it("deploys prod after the push, then documents the image in prod's store", () => {
             var result = runCi(onMaster({ TRAVIS_PULL_REQUEST: 'false' }));
 
             expect(result.status).to.equal(0);
-            expect(result.ran).to.deep.equal(['build', 'lint', 'test', 'build-dockers', 'push-dockers']);
+            expect(result.ran).to.deep.equal([
+                'build',
+                'lint',
+                'test',
+                'build-dockers',
+                'push-dockers',
+                'deploy prod 77',
+                `emit-service-sbom 77 ${PUSH_SHA} ENVIRONMENT=prod CI_BUILD_ENV=travis-dist:noble`,
+            ]);
         });
 
-        it('deploys sys for a pull request, after the image has been pushed', () => {
-            var result = runCi(onMaster({ TRAVIS_PULL_REQUEST: '10' }));
+        it("deploys sys for a pull request after the push, then documents the image in sys's store", () => {
+            var result = runCi(onPullRequest({}));
 
             expect(result.status).to.equal(0);
             expect(result.ran).to.deep.equal([
@@ -124,7 +151,16 @@ describe('CI arm selection', () => {
                 'build-dockers',
                 'push-dockers',
                 'deploy sys 77',
+                `emit-service-sbom 77 ${PR_HEAD_SHA} ENVIRONMENT=sys CI_BUILD_ENV=travis-dist:noble`,
             ]);
+        });
+
+        it('records the pushed commit for a pull request when Travis gives no head sha', () => {
+            var result = runCi(onMaster({ TRAVIS_PULL_REQUEST: '10' }));
+
+            expect(result.ran).to.include(
+                `emit-service-sbom 77 ${PUSH_SHA} ENVIRONMENT=sys CI_BUILD_ENV=travis-dist:noble`
+            );
         });
     });
 
@@ -160,6 +196,27 @@ describe('CI arm selection', () => {
                 expect(result.status).to.equal(1);
                 expect(result.ran).to.not.include('deploy sys 77');
                 expect(result.ran).to.not.include('push-dockers');
+            });
+        });
+
+        [
+            ['a pull request', onPullRequest],
+            ['a master build', (extra) => onMaster(Object.assign({ TRAVIS_PULL_REQUEST: 'false' }, extra))],
+        ].forEach(([arm, envFor]) => {
+            ['', undefined].forEach((dist) => {
+                it(`refuses to publish ${arm} with TRAVIS_DIST=${JSON.stringify(dist)}, which the SBOM records as provenance`, () => {
+                    var env = envFor({});
+                    if (dist === undefined) {
+                        delete env.TRAVIS_DIST;
+                    } else {
+                        env.TRAVIS_DIST = dist;
+                    }
+
+                    var result = runCi(env);
+
+                    expect(result.status).to.equal(1);
+                    expect(result.ran).to.deep.equal(['build', 'lint', 'test']);
+                });
             });
         });
 
@@ -226,6 +283,44 @@ describe('CI arm selection', () => {
 
             expect(result.status).to.equal(5);
             expect(result.ran).to.not.include('deploy sys 77');
+        });
+
+        it('does not document an image the prod deploy failed to ship', () => {
+            stubSubScript('deploy', 6);
+
+            var result = runCi(onMaster({ TRAVIS_PULL_REQUEST: 'false' }));
+
+            expect(result.status).to.equal(6);
+            expect(result.ran[result.ran.length - 1]).to.equal('deploy prod 77');
+        });
+
+        it('does not document an image the sys deploy failed to ship', () => {
+            stubSubScript('deploy', 6);
+
+            var result = runCi(onPullRequest({}));
+
+            expect(result.status).to.equal(6);
+            expect(result.ran[result.ran.length - 1]).to.equal('deploy sys 77');
+        });
+
+        it('does not document an image whose push failed', () => {
+            stubSubScript('push-dockers', 5);
+
+            var result = runCi(onMaster({ TRAVIS_PULL_REQUEST: 'false' }));
+
+            expect(result.status).to.equal(5);
+            expect(result.ran[result.ran.length - 1]).to.equal('push-dockers');
+        });
+
+        // The step is last, so this is the one failure that could be swallowed without anyone noticing.
+        ['false', '10'].forEach((pullRequest) => {
+            it(`fails the build when the SBOM emit fails (TRAVIS_PULL_REQUEST=${pullRequest})`, () => {
+                stubSubScript('emit-service-sbom', 9);
+
+                var result = runCi(onMaster({ TRAVIS_PULL_REQUEST: pullRequest }));
+
+                expect(result.status).to.equal(9);
+            });
         });
 
         it('does not push when the image build failed', () => {
