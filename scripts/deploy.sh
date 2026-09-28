@@ -10,6 +10,11 @@ cd "${0%/*}" # ensure cwd is script dir
 
 cd ../aws
 
+if [ $# -gt 3 ]; then
+  echo "deploy.sh: too many arguments - usage: deploy.sh <sys|prod> <build-number> [--review]" >&2
+  exit 64
+fi
+
 ENVIRONMENT="${1:?environment required (sys or prod)}"
 DOCKER_TAG="${2:?docker tag required}"
 # --review creates the change set and stops, so what a deploy would replace can be read before it runs.
@@ -76,7 +81,7 @@ esac
 
 if [ "$ENVIRONMENT" = prod ]; then
   aws cloudformation describe-stacks --stack-name "$STACK_NAME" >/dev/null \
-    || { echo "deploy.sh: prod stack $STACK_NAME not found - refusing to create a new one" >&2; exit 1; }
+    || { echo "deploy.sh: could not read prod stack $STACK_NAME (missing, or no access) - refusing to deploy, so a new one is never created" >&2; exit 1; }
 fi
 
 if [ "$MODE" = --review ]; then

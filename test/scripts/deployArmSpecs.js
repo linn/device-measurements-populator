@@ -173,6 +173,7 @@ describe('deploy arms', () => {
             ['a tag that is not a build number', ['prod', 'latest']],
             ['a zero-padded tag', ['prod', '077']],
             ['an unknown option', ['prod', '77', '--yes']],
+            ['an argument after the option', ['prod', '77', '--review', 'typo']],
         ].forEach(([what, args]) => {
             it(`refuses ${what}`, () => {
                 var result = deploy(args);
