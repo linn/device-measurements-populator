@@ -12,9 +12,29 @@ cd ../aws
 
 ENVIRONMENT="${1:?environment required (sys or prod)}"
 DOCKER_TAG="${2:?docker tag required}"
+# --review creates the change set and stops, so what a deploy would replace can be read before it runs.
+MODE="${3:-}"
+
+case "$DOCKER_TAG" in
+  ''|*[!0-9]*|0*)
+    echo "deploy.sh: docker tag '$DOCKER_TAG' is not a build number" >&2
+    exit 64
+    ;;
+esac
+case "$MODE" in
+  ''|--review) ;;
+  *)
+    echo "deploy.sh: unknown option '$MODE' (only --review)" >&2
+    exit 64
+    ;;
+esac
 
 # CI deploys sys only (scripts/ci.sh); prod is run by hand. Prod is not a like-for-like release of sys:
-# its first deploy of this template is a cutover, and the order it has to go in is in README.md.
+# its first deploy of this template is a cutover, and the order it has to go in is in README.md
+# (background: https://github.com/linn/device-measurements-populator/issues/12).
+#
+# CLUSTER is the NAME of the SSM parameter holding the cluster name - the template's targetCluster is
+# AWS::SSM::Parameter::Value<String> - which linn-api-infrastructure publishes per environment.
 case "$ENVIRONMENT" in
   sys)
     STACK_NAME=deviceMeasurementPopulator-sys
@@ -31,11 +51,12 @@ case "$ENVIRONMENT" in
     LEGACY_TARGET_GROUP_ARN=none
     ;;
   prod)
-    # The stack created by hand in 2016, and the cluster it runs on. Both are the live values, not the
-    # naming convention: a different stack name would create a second service beside this one, and the
-    # cluster is not LinnApiClusterName-prod.
+    # The stack created by hand in 2016. Its name is the live value, not the naming convention: any
+    # other name would create a second service beside this one, which the existence check below refuses.
+    # The service moves off the 2016 stack's production-cluster-v2 onto the estate cluster as it is
+    # replaced (see README.md).
     STACK_NAME=deviceMeasurementPopulator
-    CLUSTER=production-cluster-v2
+    CLUSTER=LinnApiClusterName-prod
     DEVICES_TABLE=linn.cloud.devices
     PRODUCT_DESCRIPTORS_TABLE=linn.cloud.product-descriptors
     PRODUCT_DESCRIPTORS_TABLE_INDEX=linn.cloud.product-descriptors.index
@@ -53,13 +74,25 @@ case "$ENVIRONMENT" in
     ;;
 esac
 
-echo "Deploying $STACK_NAME (image tag $DOCKER_TAG)..."
+if [ "$ENVIRONMENT" = prod ]; then
+  aws cloudformation describe-stacks --stack-name "$STACK_NAME" >/dev/null \
+    || { echo "deploy.sh: prod stack $STACK_NAME not found - refusing to create a new one" >&2; exit 1; }
+fi
+
+if [ "$MODE" = --review ]; then
+  EXECUTE=--no-execute-changeset
+  echo "Creating a change set for $STACK_NAME (image tag $DOCKER_TAG), NOT executing it..."
+else
+  EXECUTE=
+  echo "Deploying $STACK_NAME (image tag $DOCKER_TAG)..."
+fi
 
 aws cloudformation deploy \
   --stack-name="$STACK_NAME" \
   --template-file=./deviceMeasurementsPopulatorCloudFormation.yaml \
   --capabilities=CAPABILITY_IAM \
   --no-fail-on-empty-changeset \
+  ${EXECUTE:+"$EXECUTE"} \
   --parameter-overrides \
       dockerTag="$DOCKER_TAG" \
       targetCluster="$CLUSTER" \

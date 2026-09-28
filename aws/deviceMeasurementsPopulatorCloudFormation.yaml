@@ -189,11 +189,9 @@ Resources:
   # retention that effort settled on.
   #
   # Named from the stack rather than an environment parameter: this template deliberately has no
-  # environment input - its only conditional keys on the target-group arrangement instead. That keeps
-  # sys distinct only as far as the stack name does: scripts/deploy.sh hardcodes
-  # deviceMeasurementPopulator-sys and refuses every other environment, and prod is deployed by hand
-  # (see issue #12), so prod's group name is whatever stack name the operator uses at cutover and is
-  # not recorded anywhere here.
+  # environment input - its only conditional keys on the target-group arrangement instead. So each
+  # environment's group follows the stack name scripts/deploy.sh gives it: deviceMeasurementPopulator-sys
+  # and, for prod, the 2016 stack deviceMeasurementPopulator.
   serviceLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
