@@ -1,9 +1,10 @@
 'use strict';
 
-// A structural proxy, deliberately. The behaviour it stands for - a SIGTERM reaching node - is only
-// observable inside a container, so nothing in this suite can assert it directly. What it CAN do is
-// refuse the one edit that silently disables the drain: putting npm back in front of node, which
-// makes node a grandchild of PID 1 and leaves the forwarded signal at the intervening shell.
+// A structural proxy, deliberately. A SIGTERM reaching node as PID 1 is only observable inside a
+// container, so nothing in this suite can assert it directly - integration/shutdownSignalSpecs drives
+// bin/www itself but on the host. What this CAN do is refuse the edits that silently stop the signal
+// arriving: npm back in front of node, which makes node a grandchild of PID 1 and leaves the forwarded
+// signal at the intervening shell, or a different stop signal.
 
 const chai = require('chai');
 const expect = chai.expect;
@@ -14,7 +15,12 @@ const REPO_ROOT = path.join(__dirname, '..');
 const dockerfile = fs.readFileSync(path.join(REPO_ROOT, 'Dockerfile'), 'utf8');
 const packageJson = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'));
 
-const entrypointLines = dockerfile.split('\n').filter((line) => line.trim().startsWith('ENTRYPOINT'));
+// Dockerfile instructions are case-insensitive, so a lower-case one must not slip past.
+function instructions(keyword) {
+    return dockerfile.split('\n').filter((line) => new RegExp(`^\\s*${keyword}\\b`, 'i').test(line));
+}
+
+const entrypointLines = instructions('ENTRYPOINT');
 
 describe('the container entrypoint', () => {
     it('is declared exactly once', () => {
@@ -46,8 +52,11 @@ describe('the container entrypoint', () => {
     });
 
     it('declares no CMD, which would only be arguments to node', () => {
-        const cmd = dockerfile.split('\n').filter((line) => line.trim().startsWith('CMD'));
-        expect(cmd).to.deep.equal([]);
+        expect(instructions('CMD')).to.deep.equal([]);
+    });
+
+    it('declares no STOPSIGNAL, so ECS stops the container with the SIGTERM the drain listens for', () => {
+        expect(instructions('STOPSIGNAL')).to.deep.equal([]);
     });
 });
 
@@ -85,11 +94,11 @@ describe('the entry point', () => {
     it('holds signals before it loads anything else', () => {
         // Node as PID 1 discards SIGTERM while nothing listens for it, so the hold has to be registered
         // before the rest of the dependency graph loads - and only the order of statements decides that.
-        const www = fs.readFileSync(path.join(REPO_ROOT, 'bin', 'www'), 'utf8');
+        const www = fs.readFileSync(path.join(REPO_ROOT, 'bin', 'www'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
         const statements = www
             .split('\n')
             .map((line) => line.trim())
-            .filter((line) => !line.startsWith('//') && !line.startsWith('*'))
+            .filter((line) => !line.startsWith('//'))
             .filter((line) => line.includes('require(') || line.includes('holdSignalsUntilInstalled('));
         expect(statements.slice(0, 2)).to.deep.equal([
             "var gracefulShutdown = require('@linn-cloud/graceful-shutdown');",
