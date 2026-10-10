@@ -1,5 +1,5 @@
-# Version updates. Security updates are switched on in the repository settings, and the cooldown does
-# not apply to them. Nothing here merges anything: every pull request needs a human merge.
+# Version updates only. Security updates are switched on in the repository settings, and the cooldown
+# does not apply to them. Nothing in this file merges a pull request.
 version: 2
 updates:
   - package-ecosystem: "npm"
@@ -22,6 +22,11 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 7
+    ignore:
+      # A base-image major changes the runtime (Node or .NET version), so it moves with the code, by hand.
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
     groups:
       minor-and-patch:
         update-types:
