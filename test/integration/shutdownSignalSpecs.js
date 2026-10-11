@@ -45,18 +45,24 @@ describe('shutting down the real entry point on SIGTERM', () => {
 
         const socket = await connect(port);
         const response = collect(socket);
-        // The body is left one byte short, so the request is genuinely in flight when the signal lands.
+        // The body is withheld until after the signal, so the request is genuinely in flight when it
+        // lands. Expect: 100-continue makes node answer "100 Continue" only once it has parsed the
+        // headers, which proves the server is handling the request before the signal is sent; without
+        // that, a slow agent could deliver SIGTERM first, while the connection still counts as idle,
+        // and the drain would close it unanswered.
+        const parsed = waitForData(socket, /100 Continue/);
         socket.write(
             'PUT /cloud-product-descriptors/x HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\n' +
-                'Content-Length: 2\r\n\r\n{'
+                'Content-Length: 2\r\nExpect: 100-continue\r\n\r\n'
         );
+        await parsed;
 
         child.kill('SIGTERM');
         await child.waitFor(/draining in-flight requests/);
-        socket.write('}');
+        socket.write('{}');
 
-        const statusLine = (await response).split('\r\n')[0];
-        expect(statusLine).to.equal('HTTP/1.1 400 Bad Request');
+        const statusLines = (await response).split('\r\n').filter((line) => line.startsWith('HTTP/1.1 '));
+        expect(statusLines).to.deep.equal(['HTTP/1.1 100 Continue', 'HTTP/1.1 400 Bad Request']);
         expect(await child.exited).to.deep.equal({ code: 0, signal: null });
     });
 
@@ -142,6 +148,20 @@ function collect(socket) {
             received += chunk.toString();
         });
         socket.on('close', () => resolve(received));
+    });
+}
+
+function waitForData(socket, pattern) {
+    return new Promise((resolve) => {
+        let received = '';
+        const onData = (chunk) => {
+            received += chunk.toString();
+            if (pattern.test(received)) {
+                socket.removeListener('data', onData);
+                resolve();
+            }
+        };
+        socket.on('data', onData);
     });
 }
 
