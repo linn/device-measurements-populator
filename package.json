@@ -36,6 +36,6 @@
     "sinon-chai": "^4.0.1"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=26"
   }
 }
